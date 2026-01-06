@@ -9,12 +9,9 @@ import urllib.parse
 import os
 
 # --- [1. 기본 설정 및 저장소 준비] ---
-st.set_page_config(page_title="쇼츠 생성기 (자동저장+네이버)", page_icon="💾", layout="wide")
+st.set_page_config(page_title="쇼츠 생성기 (글자조절+네이버)", page_icon="🎚️", layout="wide")
 
-# 이미지를 저장할 로컬 폴더 이름
 IMAGE_SAVE_DIR = "singer_images"
-
-# 폴더가 없으면 자동으로 생성
 if not os.path.exists(IMAGE_SAVE_DIR):
     os.makedirs(IMAGE_SAVE_DIR)
 
@@ -52,9 +49,7 @@ QUIZ_TOPICS = [
 # --- [4. 핵심 기능 함수] ---
 
 def save_image_local(singer_name, uploaded_file):
-    """업로드된 파일을 로컬 폴더에 저장"""
     try:
-        # 파일명을 '가수이름.jpg'로 저장
         file_path = os.path.join(IMAGE_SAVE_DIR, f"{singer_name}.jpg")
         with open(file_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
@@ -62,8 +57,6 @@ def save_image_local(singer_name, uploaded_file):
     except: return False
 
 def load_image_local(singer_name):
-    """로컬 폴더에서 이미지 불러오기"""
-    # jpg, png, jpeg 등 확장자 확인
     for ext in ['jpg', 'png', 'jpeg']:
         file_path = os.path.join(IMAGE_SAVE_DIR, f"{singer_name}.{ext}")
         if os.path.exists(file_path):
@@ -73,7 +66,6 @@ def load_image_local(singer_name):
     return None
 
 def fetch_image_secure(url):
-    """웹 이미지 다운로드"""
     if not url or not url.startswith("http"): return None
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/110.0.0.0 Safari/537.36"}
     try:
@@ -82,7 +74,6 @@ def fetch_image_secure(url):
     except: return None
 
 def search_naver_profile_image(singer_name):
-    """네이버 프로필 사진 검색"""
     search_query = f"가수 {singer_name} 네이버 인물정보 프로필 사진"
     try:
         with DDGS() as ddgs:
@@ -94,27 +85,40 @@ def search_naver_profile_image(singer_name):
     except: pass
     return None
 
+# --- [강력해진 폰트 로드 함수] ---
 @st.cache_resource
 def load_fonts():
-    url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-ExtraBold.ttf"
-    try:
-        response = requests.get(url, timeout=10)
-        return BytesIO(response.content)
-    except: return None
+    # 1순위: 구글 폰트, 2순위: 백업 서버
+    urls = [
+        "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-ExtraBold.ttf",
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/nanumgothic/NanumGothic-Bold.ttf",
+        "https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_one@1.0/NanumGothic.woff" # 백업
+    ]
+    for url in urls:
+        try:
+            response = requests.get(url, timeout=15)
+            if response.status_code == 200: return BytesIO(response.content)
+        except: continue
+    return None
 
 def create_shorts_image(q_text, names, image_pil_list, design_settings):
-    """최종 합성 (필터 없음)"""
+    """최종 합성 (글자 크기 반영)"""
     canvas = Image.new('RGB', (1080, 1920), design_settings['bg_color'])
     draw = ImageDraw.Draw(canvas)
     
     font_bytes = load_fonts()
-    try:
-        if font_bytes:
-            font_title = ImageFont.truetype(font_bytes, 100)
+    font_title = None
+    font_name = None
+
+    if font_bytes:
+        try:
+            # 사용자가 설정한 크기 적용
+            font_title = ImageFont.truetype(font_bytes, design_settings['title_size'])
             font_bytes.seek(0)
-            font_name = ImageFont.truetype(font_bytes, 70)
-        else: raise Exception
-    except:
+            font_name = ImageFont.truetype(font_bytes, design_settings['name_size'])
+        except: pass
+
+    if font_title is None: # 폰트 로드 실패 시 비상용
         font_title = ImageFont.load_default()
         font_name = ImageFont.load_default()
 
@@ -131,7 +135,7 @@ def create_shorts_image(q_text, names, image_pil_list, design_settings):
 
     for i, (name, img, pos) in enumerate(zip(names, image_pil_list, positions)):
         if img:
-            # 원본 리사이즈 (Crop & Resize)
+            # 원본 리사이즈
             img_ratio = img.width / img.height
             target_ratio = size[0] / size[1]
             if img_ratio > target_ratio:
@@ -145,11 +149,6 @@ def create_shorts_image(q_text, names, image_pil_list, design_settings):
             img = img.resize(size, Image.LANCZOS)
         else:
             img = Image.new('RGB', size, (50, 50, 50))
-            # 물음표
-            draw_temp = ImageDraw.Draw(img)
-            try:
-                draw_temp.text((200, 200), "?", fill="white", font=font_title)
-            except: pass
 
         canvas.paste(img, pos)
         
@@ -170,17 +169,32 @@ def create_shorts_image(q_text, names, image_pil_list, design_settings):
     return canvas
 
 # --- [5. 메인 UI] ---
-st.title("💾 쇼츠 생성기 (자동저장 + 네이버)")
-st.caption("사진을 한 번만 올리면 자동 저장되어 다음부터는 바로 뜹니다.")
+st.title("🎚️ 쇼츠 생성기 (글자조절 + 네이버)")
+st.caption("왼쪽 사이드바에서 글자 크기와 색상을 자유롭게 조절하세요.")
 
+# === [사이드바: 디자인 설정 (크기 조절 추가)] ===
 with st.sidebar:
     st.header("🎨 디자인 설정")
+    st.caption("색상과 크기를 조절해보세요.")
+    
+    # 색상 설정 (기존 유지)
     bg_color = st.color_picker("배경색", "#000000")
     title_color = st.color_picker("질문 색", "#FFFF00")
     tag_bg_color = st.color_picker("이름표 배경", "#000000")
     border_color = st.color_picker("테두리 색", "#00FF00")
     name_color = st.color_picker("이름 색", "#00FF00")
-    design_settings = {'bg_color': bg_color, 'title_color': title_color, 'tag_bg_color': tag_bg_color, 'border_color': border_color, 'name_color': name_color}
+    
+    st.divider()
+    
+    # 글자 크기 설정 (새로 추가!)
+    title_size = st.slider("질문 글자 크기", min_value=50, max_value=150, value=100, step=5)
+    name_size = st.slider("이름 글자 크기", min_value=40, max_value=100, value=70, step=5)
+
+    design_settings = {
+        'bg_color': bg_color, 'title_color': title_color,
+        'tag_bg_color': tag_bg_color, 'border_color': border_color, 'name_color': name_color,
+        'title_size': title_size, 'name_size': name_size # 크기 정보 추가
+    }
 
 tab_s, tab_t = st.tabs(["👤 인물 선택 (Top 50)", "📝 주제 선택"])
 with tab_s:
@@ -198,13 +212,10 @@ if st.button("🚀 퀴즈 생성하기 (저장된 사진 우선 확인)", type="
         random.shuffle(options)
         question = (sel_topic if t_mode == "직접" else random.choice(QUIZ_TOPICS)).format(name=correct)
         
-        # 1. 로컬에 저장된게 있는지 먼저 확인 -> 없으면 네이버 검색
         search_results = []
         for s in options:
-            if load_image_local(s): # 저장된 파일이 있음
-                search_results.append("LOCAL_FOUND")
-            else: # 없으면 URL 검색
-                search_results.append(search_naver_profile_image(s))
+            if load_image_local(s): search_results.append("LOCAL_FOUND")
+            else: search_results.append(search_naver_profile_image(s))
         
         st.session_state['auto_data'] = {'q': question, 'names': options, 'results': search_results}
 
@@ -222,9 +233,8 @@ if 'auto_data' in st.session_state:
             res = data['results'][i]
             st.markdown(f"**{i+1}번: {name}**")
             
-            # 이미지 결정 로직 (로컬 우선 -> URL 다운로드)
             current_img = None
-            local_file = load_image_local(name) # 혹시 그새 저장됐을 수도 있으니 재확인
+            local_file = load_image_local(name)
             
             if local_file:
                 st.success("📂 저장된 사진을 불러왔습니다.")
@@ -239,10 +249,9 @@ if 'auto_data' in st.session_state:
                 q_enc = urllib.parse.quote(f"{name} 프로필")
                 st.markdown(f"[네이버 검색 바로가기](https://search.naver.com/search.naver?where=image&query={q_enc})")
 
-            # 업로드 (저장 기능)
             uploaded = st.file_uploader(f"'{name}' 사진 변경/저장", key=f"up_{i}")
             if uploaded:
-                save_image_local(name, uploaded) # 저장!
+                save_image_local(name, uploaded)
                 current_img = Image.open(uploaded).convert("RGB")
                 st.toast(f"{name} 사진 저장 완료! 다음엔 자동으로 뜹니다.")
             
@@ -251,10 +260,12 @@ if 'auto_data' in st.session_state:
 
     with col_r:
         st.subheader("📸 최종 결과물")
-        if st.button("✨ 다시 그리기"): pass
+        # 버튼 클릭 시 리렌더링 (크기/색상 변경 즉시 반영)
+        if st.button("✨ 다시 그리기 (설정 적용)"): pass
+        
         result_img = create_shorts_image(new_q, data['names'], final_pils, design_settings)
         st.image(result_img, use_container_width=True)
         
         buf = BytesIO()
         result_img.save(buf, format="JPEG", quality=100)
-        st.download_button("💾 다운로드", buf.getvalue(), file_name="shorts_auto_save.jpg", mime="image/jpeg", type="primary", use_container_width=True)
+        st.download_button("💾 다운로드", buf.getvalue(), file_name="shorts_final_adjustable.jpg", mime="image/jpeg", type="primary", use_container_width=True)
