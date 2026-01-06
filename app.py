@@ -6,9 +6,10 @@ from io import BytesIO
 import cv2
 import numpy as np
 from duckduckgo_search import DDGS
+import urllib.parse # 링크 생성을 위한 라이브러리 추가
 
 # --- [1. 기본 설정] ---
-st.set_page_config(page_title="쇼츠 자동 생성기 (강력모드)", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="쇼츠 자동 생성기 (검색 링크 지원)", page_icon="🛡️", layout="wide")
 
 # --- [2. 비밀번호 보안] ---
 def check_password():
@@ -25,7 +26,7 @@ def password_entered():
 
 if not check_password(): st.stop()
 
-# --- [3. 데이터: 가수 100명 & 주제 100개] ---
+# --- [3. 데이터 설정] ---
 TROT_SINGERS = [
     "임영웅","영탁","이찬원","김호중","정동원","장민호","김희재","나훈아","남진","송가인",
     "장윤정","홍진영","박군","박서진","진성","설운도","태진아","송대관","김연자","주현미",
@@ -79,64 +80,40 @@ QUIZ_TOPICS = [
 
 # --- [4. 핵심 기능 함수] ---
 
-# 4-1. 강력한 이미지 다운로드 함수 (User-Agent 추가)
 def fetch_image_secure(url):
-    """
-    일반적인 requests.get은 로봇으로 차단당함.
-    브라우저(User-Agent)인 척 속여서 이미지를 가져오는 함수.
-    """
-    if not url or not url.startswith("http"):
-        return None
-        
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
-        "Referer": "https://www.google.com/"
-    }
-    
+    """봇 차단 우회하여 이미지 다운로드"""
+    if not url or not url.startswith("http"): return None
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/110.0.0.0 Safari/537.36"}
     try:
         response = requests.get(url, headers=headers, timeout=5)
-        response.raise_for_status() # 403, 404 에러 시 예외 발생
+        response.raise_for_status()
         return Image.open(BytesIO(response.content)).convert("RGB")
-    except Exception as e:
-        print(f"다운로드 실패 ({url}): {e}")
-        return None
+    except Exception: return None
 
-# 4-2. 검색 함수 (재시도 로직 추가)
 def search_image_auto(query):
-    """1차 시도 실패 시 2차 검색어로 재시도"""
+    """이미지 검색 시도"""
     search_terms = [f"{query} wiki image", f"{query} singer", f"{query} 트로트"]
-    
     try:
         with DDGS() as ddgs:
             for term in search_terms:
-                # 검색어별로 시도
                 results = list(ddgs.images(term, max_results=1))
-                if results:
-                    return results[0]['image'] # 성공하면 URL 반환
-    except Exception as e:
-        print(f"검색 엔진 오류: {e}")
+                if results: return results[0]['image']
+    except Exception: pass
     return None
 
-# 4-3. 스케치 변환 (필수 적용)
 def convert_to_sketch(pil_image):
-    """사진을 연필 스케치 그림처럼 변환"""
+    """스케치 필터 강제 적용"""
     try:
         img_np = np.array(pil_image)
         if len(img_np.shape) == 2: gray = img_np
         else: gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-        
         inverted = 255 - gray
         blurred = cv2.GaussianBlur(inverted, (21, 21), 0)
         inverted_blurred = 255 - blurred
-        
-        # 0으로 나누기 방지 및 스케치 효과
         sketch = cv2.divide(gray, inverted_blurred, scale=256.0)
         return Image.fromarray(cv2.cvtColor(sketch, cv2.COLOR_GRAY2RGB))
-    except Exception as e:
-        print(f"스케치 변환 실패: {e}")
-        return pil_image # 실패하면 원본이라도 반환
+    except: return pil_image
 
-# 4-4. 폰트 로드
 @st.cache_resource
 def load_fonts():
     font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-ExtraBold.ttf"
@@ -145,12 +122,10 @@ def load_fonts():
         return BytesIO(response.content)
     except: return None
 
-# 4-5. 이미지 합성 (최종)
 def create_shorts_image(q_text, names, image_sources):
     canvas = Image.new('RGB', (1080, 1920), (0, 0, 0))
     draw = ImageDraw.Draw(canvas)
     
-    # 폰트
     font_bytes = load_fonts()
     try:
         if font_bytes:
@@ -162,7 +137,6 @@ def create_shorts_image(q_text, names, image_sources):
         font_title = ImageFont.load_default()
         font_name = ImageFont.load_default()
 
-    # 제목
     bbox = draw.textbbox((0, 0), q_text, font=font_title)
     text_w = bbox[2] - bbox[0]
     draw.text(((1080 - text_w) / 2, 150), q_text, font=font_title, fill="#FFFF00", align="center")
@@ -172,19 +146,13 @@ def create_shorts_image(q_text, names, image_sources):
 
     for i, (name, source, pos) in enumerate(zip(names, image_sources, positions)):
         img = None
+        # 소스 처리
+        if isinstance(source, BytesIO): img = Image.open(source).convert("RGB")
+        elif isinstance(source, str): img = fetch_image_secure(source)
         
-        # 1. 이미지 로드 시도
-        if isinstance(source, BytesIO): # 직접 업로드
-            img = Image.open(source).convert("RGB")
-        elif isinstance(source, str): # 검색된 URL
-            img = fetch_image_secure(source) # <--- 여기가 핵심 수정 (강제 다운로드)
-        
-        # 2. 이미지 가공
+        # 이미지 가공
         if img:
-            # 로드 성공 시 무조건 스케치 필터 적용
-            img = convert_to_sketch(img)
-            
-            # 크롭
+            img = convert_to_sketch(img) # 스케치 필수
             img_ratio = img.width / img.height
             target_ratio = size[0] / size[1]
             if img_ratio > target_ratio:
@@ -197,15 +165,13 @@ def create_shorts_image(q_text, names, image_sources):
                 img = img.crop((0, offset, img.width, offset + new_height))
             img = img.resize(size, Image.LANCZOS)
         else:
-            # 로드 실패 시 (회색 박스 + 물음표 텍스트)
             img = Image.new('RGB', size, (50, 50, 50))
             draw_temp = ImageDraw.Draw(img)
             draw_temp.text((200, 200), "?", fill="white", font=font_title)
 
-        # 3. 캔버스에 붙이기
         canvas.paste(img, pos)
-
-        # 4. 이름표
+        
+        # 이름표
         tag_w, tag_h = 300, 120
         tag_x = pos[0] + (size[0] - tag_w) // 2
         tag_y = pos[1] + size[1] - (tag_h // 2)
@@ -219,29 +185,26 @@ def create_shorts_image(q_text, names, image_sources):
     return canvas
 
 # --- [5. 메인 UI] ---
-st.title("🛡️ 쇼츠 자동 생성기 (강력 모드)")
-st.caption("강력해진 이미지 검색 기능과 스케치 필터 자동 적용이 포함되었습니다.")
+st.title("🛡️ 쇼츠 자동 생성기 (검색 링크 지원)")
 
-# 탭 설정
 tab_singer, tab_topic = st.tabs(["👤 인물 설정", "📝 주제 설정"])
 
 with tab_singer:
     singer_mode = st.radio("인물 선택 방식", ["랜덤 추천", "직접 선택"], horizontal=True, key="s_mode")
     selected_main_singer = None
     if singer_mode == "직접 선택":
-        selected_main_singer = st.selectbox("가수 목록 (100명)", TROT_SINGERS, key="s_select")
+        selected_main_singer = st.selectbox("가수 목록", TROT_SINGERS, key="s_select")
 
 with tab_topic:
     topic_mode = st.radio("주제 선택 방식", ["랜덤 추천", "직접 선택"], horizontal=True, key="t_mode")
     selected_quiz_topic = None
     if topic_mode == "직접 선택":
-        selected_quiz_topic = st.selectbox("주제 목록 (100개)", QUIZ_TOPICS, key="t_select")
+        selected_quiz_topic = st.selectbox("주제 목록", QUIZ_TOPICS, key="t_select")
 
 st.divider()
 
 if st.button("🚀 설정대로 퀴즈 생성하기", type="primary", use_container_width=True):
-    with st.spinner("🤖 이미지를 강력하게 캡쳐해오는 중... (잠시만 기다려주세요)"):
-        # 로직
+    with st.spinner("🤖 이미지를 찾는 중입니다..."):
         if singer_mode == "직접 선택": correct_answer = selected_main_singer
         else: correct_answer = random.choice(TROT_SINGERS)
         
@@ -252,7 +215,6 @@ if st.button("🚀 설정대로 퀴즈 생성하기", type="primary", use_contai
         if topic_mode == "직접 선택": question = selected_quiz_topic.format(name=correct_answer)
         else: question = random.choice(QUIZ_TOPICS).format(name=correct_answer)
         
-        # 이미지 검색 (단순 URL 수집)
         auto_urls = []
         for singer in options:
             url = search_image_auto(singer)
@@ -269,18 +231,28 @@ if 'auto_data' in st.session_state:
     col_l, col_r = st.columns([1, 1.2])
     
     with col_l:
-        st.subheader("🛠️ 사진 확인")
+        st.subheader("🛠️ 사진 확인 & 업로드")
         new_q = st.text_area("질문 멘트", value=data['q'], height=80)
         final_sources = []
         
         for i in range(4):
-            st.markdown(f"**{i+1}번: {data['names'][i]}**")
+            singer_name = data['names'][i]
+            st.markdown(f"**{i+1}번: {singer_name}**")
+            
+            # 1. 자동 검색된 이미지가 있으면 표시
             if data['urls'][i]:
                 st.image(data['urls'][i], width=150)
                 final_sources.append(data['urls'][i])
             else:
-                st.error("이미지를 찾지 못했습니다.")
-                uploaded = st.file_uploader(f"{data['names'][i]} 업로드", key=f"up_{i}")
+                # 2. 없으면 구글 검색 링크와 업로드 버튼 제공
+                st.warning("이미지 자동 로드 실패")
+                
+                # 구글 이미지 검색 링크 생성
+                search_query = urllib.parse.quote(f"{singer_name} 고화질")
+                google_url = f"https://www.google.com/search?q={search_query}&tbm=isch"
+                st.markdown(f"👉 **[🔍 '{singer_name}' 사진 구글에서 찾기 (클릭)]({google_url})**")
+                
+                uploaded = st.file_uploader(f"{singer_name} 사진 직접 올리기", key=f"up_{i}")
                 final_sources.append(uploaded if uploaded else None)
             st.divider()
 
@@ -289,8 +261,8 @@ if 'auto_data' in st.session_state:
         if st.button("✨ 결과물 다시 그리기", use_container_width=True): pass
 
         final_img = create_shorts_image(new_q, data['names'], final_sources)
-        st.image(final_img, caption="완성본 (스케치 필터 강제 적용)", use_container_width=True)
+        st.image(final_img, caption="완성본 (자동 스케치 적용됨)", use_container_width=True)
         
         buf = BytesIO()
         final_img.save(buf, format="JPEG", quality=95)
-        st.download_button("💾 이미지 다운로드", data=buf.getvalue(), file_name="shorts_pro.jpg", mime="image/jpeg", type="primary", use_container_width=True)
+        st.download_button("💾 이미지 다운로드", data=buf.getvalue(), file_name="shorts_final.jpg", mime="image/jpeg", type="primary", use_container_width=True)
