@@ -81,32 +81,36 @@ def convert_to_sketch(pil_image):
     
     return Image.fromarray(cv2.cvtColor(sketch, cv2.COLOR_GRAY2RGB))
 
-# 4-3. 폰트 로드 (캐싱 적용)
+# 4-3. 폰트 로드 (캐싱 적용) - 바이트 데이터 반환
 @st.cache_resource
 def load_fonts():
     font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-ExtraBold.ttf"
     try:
         response = requests.get(font_url, timeout=10)
-        return BytesIO(response.content)
+        return BytesIO(response.content) # BytesIO 객체 반환
     except Exception as e:
         st.warning(f"폰트 다운로드 실패 ({e}). 기본 폰트를 사용합니다.")
         return None
 
-# 4-4. 최종 이미지 합성
-def create_shorts_image(q_text, names, image_sources, use_sketch_filter):
+# 4-4. 최종 이미지 합성 (무조건 스케치 필터 적용)
+def create_shorts_image(q_text, names, image_sources):
     # 캔버스 생성 (FHD 세로)
     canvas = Image.new('RGB', (1080, 1920), (0, 0, 0))
     draw = ImageDraw.Draw(canvas)
     
-    # 폰트 설정
+    # 폰트 설정 (오류 발생 시 기본 폰트 사용)
     font_bytes = load_fonts()
     try:
         if font_bytes:
+            # BytesIO 객체에서 폰트 로드
             font_title = ImageFont.truetype(font_bytes, 100)
+            # 동일한 BytesIO 객체를 다시 사용하기 위해 seek(0) 호출
+            font_bytes.seek(0)
             font_name = ImageFont.truetype(font_bytes, 70)
         else:
-            raise Exception("Font load failed")
-    except:
+            raise Exception("Font data not found")
+    except Exception as e:
+        # st.error(f"폰트 로드 오류: {e}") # 디버깅용
         font_title = ImageFont.load_default()
         font_name = ImageFont.load_default()
 
@@ -132,9 +136,8 @@ def create_shorts_image(q_text, names, image_sources, use_sketch_filter):
                 img = Image.open(BytesIO(response.content)).convert("RGB")
             
             if img:
-                # 스케치 필터 적용
-                if use_sketch_filter:
-                    img = convert_to_sketch(img)
+                # 무조건 스케치 필터 적용
+                img = convert_to_sketch(img)
 
                 # 크롭 및 리사이즈 (비율 유지)
                 img_ratio = img.width / img.height
@@ -177,12 +180,12 @@ def create_shorts_image(q_text, names, image_sources, use_sketch_filter):
 
 # --- [5. 메인 UI] ---
 st.title("🛡️ 쇼츠 자동 생성기 (저작권 회피 모드)")
-st.markdown("이미지를 **'스케치 그림'**처럼 변환하여 저작권/초상권 위험을 줄입니다.")
+st.markdown("모든 이미지는 **자동으로 '스케치 그림'으로 변환**되어 저작권/초상권 위험을 줄입니다.")
 
-# 사이드바 설정
-with st.sidebar:
-    st.header("⚙️ 안전 설정")
-    use_sketch = st.checkbox("🎨 스케치 필터 적용 (추천)", value=True, help="사진을 그림처럼 바꿔서 저작권 봇을 피합니다.")
+# 사이드바 설정 (스케치 옵션 제거됨)
+# with st.sidebar:
+#     st.header("⚙️ 안전 설정")
+#     use_sketch = st.checkbox("🎨 스케치 필터 적용 (추천)", value=True, help="사진을 그림처럼 바꿔서 저작권 봇을 피합니다.")
 
 # 버튼 클릭 시 퀴즈 생성
 if st.button("🚀 퀴즈 & 이미지 자동 생성", type="primary", use_container_width=True):
@@ -235,7 +238,8 @@ if 'auto_data' in st.session_state:
         if st.button("✨ 결과물 다시 그리기", use_container_width=True):
              pass # 버튼 누르면 리렌더링 효과
 
-        final_img = create_shorts_image(new_q, data['names'], final_sources, use_sketch)
+        # 무조건 스케치 필터 적용하여 생성
+        final_img = create_shorts_image(new_q, data['names'], final_sources)
         st.image(final_img, caption="완성본 (다운로드 가능)", use_container_width=True)
         
         # 다운로드 버튼
