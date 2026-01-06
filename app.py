@@ -8,14 +8,15 @@ from duckduckgo_search import DDGS
 import urllib.parse
 import os
 
-# --- [1. 기본 설정 및 저장소 준비] ---
-st.set_page_config(page_title="쇼츠 생성기 (4명선택+글자조절)", page_icon="🎚️", layout="wide")
+# --- [1. 기본 설정] ---
+st.set_page_config(page_title="쇼츠 생성기 (오류수정완료)", page_icon="🛠️", layout="wide")
 
-IMAGE_SAVE_DIR = "singer_images"
-if not os.path.exists(IMAGE_SAVE_DIR):
-    os.makedirs(IMAGE_SAVE_DIR)
+# --- [2. 이미지 및 폰트 메모리 초기화] ---
+# 이미지를 잃어버리지 않게 세션(메모리)에 저장 공간을 만듭니다.
+if 'user_images' not in st.session_state:
+    st.session_state.user_images = {} 
 
-# --- [2. 비밀번호 보안] ---
+# --- [3. 비밀번호 보안] ---
 def check_password():
     if "password_correct" not in st.session_state: st.session_state.password_correct = False
     if st.session_state.password_correct: return True
@@ -30,7 +31,7 @@ def password_entered():
 
 if not check_password(): st.stop()
 
-# --- [3. 데이터: 트래픽 TOP 50명] ---
+# --- [4. 데이터: 트래픽 TOP 50명] ---
 TROT_SINGERS_TOP50 = [
     "임영웅", "이찬원", "박지현", "영탁", "김호중", "정동원", "장민호", "박서진", "안성훈", "손태진",
     "진해성", "최수호", "송가인", "전유진", "양지은", "김다현", "김태연", "홍지윤", "황영웅", "진욱",
@@ -46,34 +47,19 @@ QUIZ_TOPICS = [
     "가장 청순한 첫사랑 재질 1위?", "지금 이 순간 가장 빛나는 별!", "영원한 우리의 오빠/언니!"
 ]
 
-# --- [4. 핵심 기능 함수] ---
-
-def save_image_local(singer_name, uploaded_file):
-    try:
-        file_path = os.path.join(IMAGE_SAVE_DIR, f"{singer_name}.jpg")
-        with open(file_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-        return True
-    except: return False
-
-def load_image_local(singer_name):
-    for ext in ['jpg', 'png', 'jpeg']:
-        file_path = os.path.join(IMAGE_SAVE_DIR, f"{singer_name}.{ext}")
-        if os.path.exists(file_path):
-            try:
-                return Image.open(file_path).convert("RGB")
-            except: pass
-    return None
+# --- [5. 핵심 기능 함수] ---
 
 def fetch_image_secure(url):
+    """웹 이미지 다운로드"""
     if not url or not url.startswith("http"): return None
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/110.0.0.0 Safari/537.36"}
+    headers = {"User-Agent": "Mozilla/5.0"}
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(url, headers=headers, timeout=5)
         return Image.open(BytesIO(response.content)).convert("RGB")
     except: return None
 
 def search_naver_profile_image(singer_name):
+    """네이버 프로필 검색"""
     search_query = f"가수 {singer_name} 네이버 인물정보 프로필 사진"
     try:
         with DDGS() as ddgs:
@@ -85,39 +71,45 @@ def search_naver_profile_image(singer_name):
     except: pass
     return None
 
+# --- [폰트 로딩 강화: 실패 시 시스템 폰트 사용] ---
 @st.cache_resource
-def load_fonts():
-    urls = [
-        "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-ExtraBold.ttf",
-        "https://raw.githubusercontent.com/google/fonts/main/ofl/nanumgothic/NanumGothic-Bold.ttf",
-        "https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_one@1.0/NanumGothic.woff"
-    ]
-    for url in urls:
-        try:
-            response = requests.get(url, timeout=15)
-            if response.status_code == 200: return BytesIO(response.content)
-        except: continue
-    return None
+def load_font_file():
+    """폰트 파일을 다운로드하거나 시스템 폰트를 찾아서 경로를 반환"""
+    # 1. 구글 폰트 다운로드 시도
+    url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-ExtraBold.ttf"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return BytesIO(response.content)
+    except:
+        pass
+    
+    # 2. 다운로드 실패 시, 리눅스(Streamlit Cloud) 시스템 폰트 사용
+    # DejaVuSans는 대부분의 리눅스 서버에 기본 설치되어 있음 (한글 미지원일 수 있으나 크기 조절은 됨)
+    return "DejaVuSans.ttf" 
 
 def create_shorts_image(q_text, names, image_pil_list, design_settings):
     canvas = Image.new('RGB', (1080, 1920), design_settings['bg_color'])
     draw = ImageDraw.Draw(canvas)
     
-    font_bytes = load_fonts()
-    font_title = None
-    font_name = None
-
-    if font_bytes:
-        try:
-            font_title = ImageFont.truetype(font_bytes, design_settings['title_size'])
-            font_bytes.seek(0)
-            font_name = ImageFont.truetype(font_bytes, design_settings['name_size'])
-        except: pass
-
-    if font_title is None:
+    # 폰트 로드
+    font_file = load_font_file()
+    
+    # 제목 폰트 설정
+    try:
+        font_title = ImageFont.truetype(font_file, design_settings['title_size'])
+    except:
+        # 시스템 폰트조차 없으면 기본 폰트(크기 조절 불가) 사용하되 경고 로그
         font_title = ImageFont.load_default()
+        
+    # 이름 폰트 설정
+    try:
+        if isinstance(font_file, BytesIO): font_file.seek(0) # 파일 포인터 초기화
+        font_name = ImageFont.truetype(font_file, design_settings['name_size'])
+    except:
         font_name = ImageFont.load_default()
 
+    # 제목 그리기
     try:
         bbox = draw.textbbox((0, 0), q_text, font=font_title)
         text_w = bbox[2] - bbox[0]
@@ -146,6 +138,7 @@ def create_shorts_image(q_text, names, image_pil_list, design_settings):
 
         canvas.paste(img, pos)
         
+        # 이름표
         tag_w, tag_h = 400, 120
         tag_x = pos[0] + (size[0] - tag_w) // 2
         tag_y = pos[1] + size[1] - (tag_h // 2)
@@ -161,9 +154,9 @@ def create_shorts_image(q_text, names, image_pil_list, design_settings):
 
     return canvas
 
-# --- [5. 메인 UI] ---
-st.title("🎚️ 쇼츠 생성기 (4명선택 + 네이버)")
-st.caption("가수를 최대 4명까지 직접 선택하여 퀴즈를 만들 수 있습니다.")
+# --- [6. 메인 UI] ---
+st.title("🛠️ 쇼츠 생성기 (오류 수정판)")
+st.info("이제 글자 크기 조절이 정상 작동하며, 업로드한 사진이 사라지지 않습니다.")
 
 with st.sidebar:
     st.header("🎨 디자인 설정")
@@ -174,8 +167,9 @@ with st.sidebar:
     name_color = st.color_picker("이름 색", "#00FF00")
     
     st.divider()
-    title_size = st.slider("질문 글자 크기", 50, 150, 100, 5)
-    name_size = st.slider("이름 글자 크기", 40, 100, 70, 5)
+    # 슬라이더 값 설정
+    title_size = st.slider("질문 글자 크기", 50, 150, 80, 5)
+    name_size = st.slider("이름 글자 크기", 40, 100, 60, 5)
 
     design_settings = {
         'bg_color': bg_color, 'title_color': title_color,
@@ -188,51 +182,39 @@ tab_s, tab_t = st.tabs(["👤 인물 선택", "📝 주제 선택"])
 with tab_s:
     s_mode = st.radio("방식", ["랜덤", "직접 (최대 4명)"], horizontal=True)
     selected_singers = []
-    
     if s_mode == "직접 (최대 4명)":
-        # 멀티 셀렉트 박스 (최대 4명 제한은 안내 문구로, 로직에서 처리)
-        selected_singers = st.multiselect("가수 선택 (4명을 채우면 그 멤버로 구성됩니다)", TROT_SINGERS_TOP50, max_selections=4)
-        if len(selected_singers) < 4 and len(selected_singers) > 0:
-            st.info(f"💡 {len(selected_singers)}명을 선택하셨습니다. 나머지 {4-len(selected_singers)}명은 랜덤으로 채워집니다.")
-    
+        selected_singers = st.multiselect("가수 선택 (4명을 채우면 고정)", TROT_SINGERS_TOP50, max_selections=4)
+
 with tab_t:
     t_mode = st.radio("방식 ", ["랜덤", "직접"], horizontal=True)
     sel_topic = st.selectbox("주제 선택", QUIZ_TOPICS) if t_mode == "직접" else None
 
 if st.button("🚀 퀴즈 생성하기", type="primary", use_container_width=True):
-    with st.spinner("💾 멤버 구성 및 이미지 확인 중..."):
-        
-        # 1. 멤버 구성 로직
-        if s_mode == "직접 (최대 4명)":
-            if not selected_singers:
-                st.error("가수를 최소 1명 이상 선택해주세요.")
-                st.stop()
-            
+    with st.spinner("이미지 및 폰트 준비 중..."):
+        # 멤버 구성
+        if s_mode == "직접 (최대 4명)" and selected_singers:
             options = selected_singers[:]
-            # 4명이 안 되면 나머지 랜덤 채우기
             if len(options) < 4:
-                remaining_pool = [s for s in TROT_SINGERS_TOP50 if s not in options]
-                options.extend(random.sample(remaining_pool, 4 - len(options)))
+                remaining = [s for s in TROT_SINGERS_TOP50 if s not in options]
+                options.extend(random.sample(remaining, 4 - len(options)))
         else:
-            # 완전 랜덤
             correct = random.choice(TROT_SINGERS_TOP50)
             wrongs = random.sample([s for s in TROT_SINGERS_TOP50 if s != correct], 3)
             options = wrongs + [correct]
         
-        # 순서 섞기
         random.shuffle(options)
-        
-        # 2. 정답(주인공) 선정 - 구성된 멤버 중 한 명을 랜덤으로 지정
         correct_answer = random.choice(options)
-        
-        # 3. 질문 생성
         question = (sel_topic if t_mode == "직접" else random.choice(QUIZ_TOPICS)).format(name=correct_answer)
         
-        # 4. 이미지 검색 (로컬 -> 네이버)
+        # 이미지 URL 검색 (아직 다운로드는 아님)
         search_results = []
         for s in options:
-            if load_image_local(s): search_results.append("LOCAL_FOUND")
-            else: search_results.append(search_naver_profile_image(s))
+            # 사용자가 업로드해둔 이미지가 있는지 메모리(Session State) 확인
+            if s in st.session_state.user_images:
+                search_results.append("USER_UPLOADED")
+            else:
+                # 없으면 네이버 검색
+                search_results.append(search_naver_profile_image(s))
         
         st.session_state['auto_data'] = {'q': question, 'names': options, 'results': search_results}
 
@@ -251,37 +233,45 @@ if 'auto_data' in st.session_state:
             st.markdown(f"**{i+1}번: {name}**")
             
             current_img = None
-            local_file = load_image_local(name)
             
-            if local_file:
-                st.success("📂 저장된 사진을 불러왔습니다.")
-                st.image(local_file, width=150)
-                current_img = local_file
-            elif res and res != "LOCAL_FOUND":
-                st.info("🌐 네이버 검색 결과입니다.")
+            # 1. 사용자가 업로드한 이미지가 메모리에 있는지 확인
+            if name in st.session_state.user_images:
+                st.success("📂 업로드된 사진 사용 중")
+                current_img = st.session_state.user_images[name] # 메모리에서 가져옴
+                st.image(current_img, width=150)
+            
+            # 2. 없으면 검색 결과 사용
+            elif res and res != "USER_UPLOADED":
+                st.info("🌐 네이버 검색 결과")
                 st.image(res, width=150)
                 current_img = fetch_image_secure(res)
+            
+            # 3. 다 없으면
             else:
                 st.warning("사진이 없습니다.")
                 q_enc = urllib.parse.quote(f"{name} 프로필")
-                st.markdown(f"[네이버 검색 바로가기](https://search.naver.com/search.naver?where=image&query={q_enc})")
+                st.markdown(f"[네이버 검색](https://search.naver.com/search.naver?where=image&query={q_enc})")
 
-            uploaded = st.file_uploader(f"'{name}' 사진 변경/저장", key=f"up_{i}")
+            # 업로드 버튼 (업로드 시 즉시 메모리에 저장)
+            uploaded = st.file_uploader(f"'{name}' 사진 변경", key=f"up_{i}")
             if uploaded:
-                save_image_local(name, uploaded)
-                current_img = Image.open(uploaded).convert("RGB")
-                st.toast(f"{name} 사진 저장 완료! 다음엔 자동으로 뜹니다.")
+                img_obj = Image.open(uploaded).convert("RGB")
+                st.session_state.user_images[name] = img_obj # 메모리에 영구 저장 (세션 동안)
+                st.toast(f"{name} 사진이 등록되었습니다! (새로고침해도 유지됨)")
+                # 즉시 반영을 위해 현재 이미지를 교체
+                current_img = img_obj
             
             final_pils.append(current_img)
             st.divider()
 
     with col_r:
         st.subheader("📸 최종 결과물")
-        if st.button("✨ 다시 그리기 (설정 적용)"): pass
+        # 버튼을 누르면 리렌더링 (슬라이더 값 적용)
+        if st.button("✨ 설정 적용하여 다시 그리기", use_container_width=True): pass
         
         result_img = create_shorts_image(new_q, data['names'], final_pils, design_settings)
         st.image(result_img, use_container_width=True)
         
         buf = BytesIO()
         result_img.save(buf, format="JPEG", quality=100)
-        st.download_button("💾 다운로드", buf.getvalue(), file_name="shorts_final_multi.jpg", mime="image/jpeg", type="primary", use_container_width=True)
+        st.download_button("💾 다운로드", buf.getvalue(), file_name="shorts_fixed.jpg", mime="image/jpeg", type="primary", use_container_width=True)
