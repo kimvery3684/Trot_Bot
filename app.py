@@ -5,7 +5,7 @@ from io import BytesIO
 import os
 
 # --- [1. 기본 설정 및 폴더 준비] ---
-st.set_page_config(page_title="쇼츠 생성기 (유튜브SEO)", page_icon="🔥", layout="wide")
+st.set_page_config(page_title="쇼츠 생성기 (대본추가)", page_icon="🎙️", layout="wide")
 
 IMAGE_SAVE_DIR = "images"
 if not os.path.exists(IMAGE_SAVE_DIR):
@@ -156,19 +156,17 @@ def create_final_image(q_text, names, design):
 
     return canvas
 
-# --- [5. 유튜브 SEO 생성 함수] ---
+# --- [5. 콘텐츠 생성 함수 (메타데이터 + 대본)] ---
 def generate_youtube_metadata(question, singers):
-    # 1. 강력한 어그로성 제목 생성 (랜덤)
+    # 제목/설명/태그
     titles = [
         f"🔥 {question} 1위는 과연 누구일까요? #트로트",
         f"대박 반전! 😲 {question} 투표 결과는? #{singers[0]} #{singers[1]}",
         f"당신의 선택은? 👉 {question} (솔직히 이분이죠)",
-        f"🏆 트로트 팬들이 뽑은 {question} 레전드 결과",
-        f"※충격주의※ {question} 1위가 이분이라고?! ㄷㄷ"
+        f"🏆 트로트 팬들이 뽑은 {question} 레전드 결과"
     ]
     title = random.choice(titles)
 
-    # 2. 설명란 (참여 유도형)
     desc = f"""{question}
 
 👇 여러분의 생각을 댓글로 남겨주세요! 👇
@@ -183,16 +181,31 @@ def generate_youtube_metadata(question, singers):
 
 #트로트 #트로트가수 #인기투표 #임영웅 #이찬원 #김호중 #박지현 #{singers[0]} #{singers[1]}
 """
-
-    # 3. 태그 (검색량 높은 키워드 조합)
     base_tags = "트로트, 트로트가수, 미스터트롯, 현역가왕, 미스트롯, 인기투표, shorts, 쇼츠, 랭킹"
     singer_tags = ", ".join(singers)
     tags = f"{base_tags}, {singer_tags}, {question.replace(' ','')}"
-
     return title, desc, tags
 
+def generate_narration_script(question, singers):
+    # 30초 분량 쇼츠 대본
+    script = f"""(오프닝 - 긴장감 있는 톤으로)
+"자, 팬 여러분 주목하세요! 오늘의 난제, {question} 과연 누구일까요?"
+
+(본문 - 빠르고 경쾌하게)
+"후보 1번! 믿고 듣는 감성 장인, {singers[0]}!
+후보 2번! 무대 위의 카리스마, {singers[1]}!
+후보 3번! 트로트계의 보석, {singers[2]}!
+마지막 후보 4번! 떠오르는 대세, {singers[3]}!"
+
+(클로징 - 호소력 있게)
+"와... 진짜 고르기 힘든데요? 
+여러분의 최애 가수를 지금 바로 댓글로 적어주세요! 
+좋아요는 사랑입니다!"
+"""
+    return script
+
 # --- [6. 메인 UI] ---
-st.title("🔥 쇼츠 생성기 (유튜브 알고리즘 Ver)")
+st.title("🎙️ 쇼츠 생성기 (대본 추가)")
 
 if not os.path.exists(FONT_FILE):
     st.error(f"⚠️ '{FONT_FILE}' 파일이 필요합니다.")
@@ -289,21 +302,27 @@ with tab_create:
     if 'result_img' in st.session_state:
         col_res1, col_res2 = st.columns([1, 1.2])
         
-        # === [여기가 핵심: 유튜브 SEO 메타데이터 생성 구역] ===
+        # === [유튜브 업로드용 탭 구성] ===
         with col_res1:
-            st.markdown("### 🔥 유튜브 업로드용 (복사/붙여넣기)")
-            st.caption("알고리즘이 좋아하는 제목과 태그를 자동으로 생성했습니다.")
+            st.markdown("### 🔥 유튜브 업로드 센터")
+            # 탭 분리: 메타데이터 / 대본
+            tab_meta, tab_script = st.tabs(["📝 제목/설명", "🎙️ 나레이션 대본"])
             
-            # 현재 질문과 가수 명단을 가져옴
             curr_q = st.session_state.get('last_q', '')
             curr_opts = st.session_state.get('current_options', [])
             
             if curr_q and curr_opts:
                 meta_title, meta_desc, meta_tags = generate_youtube_metadata(curr_q, curr_opts)
+                script_text = generate_narration_script(curr_q, curr_opts)
                 
-                st.text_input("📌 제목 (Title)", value=meta_title)
-                st.text_area("📝 설명 (Description)", value=meta_desc, height=200)
-                st.text_area("🏷️ 태그 (Tags)", value=meta_tags, height=100)
+                with tab_meta:
+                    st.text_input("📌 제목", value=meta_title)
+                    st.text_area("📝 설명", value=meta_desc, height=200)
+                    st.text_area("🏷️ 태그", value=meta_tags, height=100)
+                
+                with tab_script:
+                    st.info("쇼츠 영상 길이에 딱 맞는 30초 대본입니다.")
+                    st.text_area("대본 내용 (TTS/녹음용)", value=script_text, height=300)
             else:
                 st.info("퀴즈 이미지를 먼저 생성해주세요.")
 
