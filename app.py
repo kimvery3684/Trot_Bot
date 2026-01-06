@@ -5,7 +5,7 @@ from io import BytesIO
 import os
 
 # --- [1. 기본 설정 및 폴더 준비] ---
-st.set_page_config(page_title="쇼츠 생성기 (최종보완)", page_icon="✨", layout="wide")
+st.set_page_config(page_title="쇼츠 생성기 (레이아웃 조절)", page_icon="📐", layout="wide")
 
 IMAGE_SAVE_DIR = "images"
 if not os.path.exists(IMAGE_SAVE_DIR):
@@ -62,21 +62,35 @@ def create_final_image(q_text, names, design):
     
     font_title = get_font(design['t_size'])
     font_name = get_font(design['n_size'])
-    font_bottom = get_font(design['b_size']) # 하단 문구 폰트
+    font_bottom = get_font(design['b_size'])
     
-    # 1. 상단 질문 그리기
+    # 1. 상단 질문 그리기 (위치 조절 가능)
+    top_y = design['layout_top_y']
     try:
         bbox = draw.textbbox((0, 0), q_text, font=font_title)
         text_w = bbox[2] - bbox[0]
-        draw.text(((1080 - text_w) / 2, 150), q_text, font=font_title, fill=design['t_color'], align="center")
+        draw.text(((1080 - text_w) / 2, top_y), q_text, font=font_title, fill=design['t_color'], align="center")
     except:
-        draw.text((50, 150), q_text, fill=design['t_color'])
+        draw.text((50, top_y), q_text, fill=design['t_color'])
 
-    # 2. 이미지 배치 (크기 줄이고 위로 올림)
-    # 기존 Y위치: 500, 1100 -> 변경: 450, 1050 (위로 올림)
-    positions = [(70, 450), (560, 450), (70, 1050), (560, 1050)]
-    # 기존 사이즈: (470, 550) -> 변경: (450, 500) (조금 줄임)
-    size = (450, 500)
+    # 2. 이미지 배치 (크기 & 위치 조절 가능)
+    img_w = design['layout_img_w']
+    img_h = int(img_w * 1.1) # 비율 유지 (세로가 조금 더 김)
+    start_y = design['layout_img_y']
+    gap = 40 # 사진 사이 간격
+    
+    # 중앙 정렬을 위한 X 시작점 계산
+    total_w = (img_w * 2) + gap
+    start_x = (1080 - total_w) // 2
+
+    # 좌표 계산: (왼쪽위, 오른쪽위, 왼쪽아래, 오른쪽아래)
+    positions = [
+        (start_x, start_y), 
+        (start_x + img_w + gap, start_y), 
+        (start_x, start_y + img_h + gap), 
+        (start_x + img_w + gap, start_y + img_h + gap)
+    ]
+    size = (img_w, img_h)
 
     for i, (name, pos) in enumerate(zip(names, positions)):
         img = load_image_from_disk(name)
@@ -98,8 +112,9 @@ def create_final_image(q_text, names, design):
         img = img.resize(size, Image.LANCZOS)
         canvas.paste(img, pos)
 
-        # 이름표
-        tag_w, tag_h = 380, 110 # 이름표도 살짝 줄임
+        # 이름표 (사진 크기에 맞춰 위치 조정)
+        tag_w = int(img_w * 0.9) # 사진 너비의 90%
+        tag_h = 110
         tag_x = pos[0] + (size[0] - tag_w) // 2
         tag_y = pos[1] + size[1] - (tag_h // 2)
         
@@ -113,54 +128,75 @@ def create_final_image(q_text, names, design):
             draw.text((tag_x + (tag_w - name_w) / 2, tag_y + (tag_h - name_h) / 2 - 10), name, font=font_name, fill=design['n_color'])
         except: pass
 
-    # 3. 하단 문구 그리기 (새로 추가된 영역)
+    # 3. 하단 문구 그리기 (위치 조절 가능)
     bottom_text = design.get('bottom_text', '')
+    bot_y = design['layout_bot_y']
+    
     if bottom_text:
         try:
             bbox_b = draw.textbbox((0, 0), bottom_text, font=font_bottom)
             text_bw = bbox_b[2] - bbox_b[0]
-            # Y좌표 1750 부근에 배치 (하단 여백 활용)
-            draw.text(((1080 - text_bw) / 2, 1750), bottom_text, font=font_bottom, fill=design['t_color'], align="center")
+            draw.text(((1080 - text_bw) / 2, bot_y), bottom_text, font=font_bottom, fill=design['t_color'], align="center")
         except: pass
 
     return canvas
 
 # --- [4. 메인 UI] ---
-st.title("✨ 쇼츠 생성기 (최종 보완판)")
+st.title("📐 쇼츠 생성기 (레이아웃 조절)")
 
 if not os.path.exists(FONT_FILE):
     st.error(f"⚠️ '{FONT_FILE}' 파일이 필요합니다.")
 
 # 디자인 설정 (사이드바)
 with st.sidebar:
-    st.header("🎨 디자인 & 문구")
+    st.header("🎨 디자인 & 레이아웃")
     
-    with st.expander("색상 설정", expanded=False):
+    # 탭으로 분리하여 깔끔하게 정리
+    tab_color, tab_layout, tab_text = st.tabs(["색상/크기", "위치/배치", "문구"])
+    
+    with tab_color:
+        st.caption("색상 설정")
         bg_color = st.color_picker("배경색", "#000000")
         t_color = st.color_picker("질문/하단 색", "#FFFF00")
         tag_bg = st.color_picker("이름표 배경", "#000000")
         border = st.color_picker("테두리 색", "#00FF00")
         n_color = st.color_picker("이름 색", "#00FF00")
         
-    with st.expander("크기 설정", expanded=True):
+        st.divider()
+        st.caption("글자 크기")
         t_size = st.slider("상단 질문 크기", 50, 150, 90)
         n_size = st.slider("이름 크기", 40, 120, 65)
-        b_size = st.slider("하단 문구 크기", 30, 100, 50) # 하단 크기 추가
+        b_size = st.slider("하단 문구 크기", 30, 120, 70)
 
-    st.divider()
-    st.header("📝 하단 문구")
-    bottom_text_input = st.text_area("하단에 들어갈 문구를 입력하세요", "구독과 좋아요는 사랑입니다💖\n댓글로 정답을 남겨주세요!")
+    with tab_layout:
+        st.info("💡 여기서 화면 구성을 조절하세요")
+        layout_top_y = st.slider("상단 질문 위치 (Y)", 50, 500, 150, help="질문을 위아래로 이동")
+        
+        st.divider()
+        layout_img_w = st.slider("사진 크기 (너비)", 300, 500, 420, help="사진 크기를 조절")
+        layout_img_y = st.slider("사진 뭉치 위치 (Y)", 200, 1000, 420, help="사진 전체를 위아래로 이동")
+        
+        st.divider()
+        layout_bot_y = st.slider("하단 문구 위치 (Y)", 1200, 1850, 1600, help="하단 문구를 위아래로 이동")
+
+    with tab_text:
+        bottom_text_input = st.text_area("하단 문구 내용", "화면 두번 터치\n댓글로 정답을 남겨주세요!")
     
     design = {
         'bg': bg_color, 't_color': t_color, 'tag_bg': tag_bg, 'border': border, 'n_color': n_color,
         't_size': t_size, 'n_size': n_size, 'b_size': b_size,
-        'bottom_text': bottom_text_input # 하단 문구 저장
+        'bottom_text': bottom_text_input,
+        # 레이아웃 변수 추가
+        'layout_top_y': layout_top_y,
+        'layout_img_w': layout_img_w,
+        'layout_img_y': layout_img_y,
+        'layout_bot_y': layout_bot_y
     }
 
 # 탭 구성
 tab_manage, tab_create = st.tabs(["1. 📸 사진 등록/관리", "2. 🚀 퀴즈 만들기"])
 
-# [탭 1: 사진 등록] (기존과 동일)
+# [탭 1: 사진 등록]
 with tab_manage:
     st.subheader("가수 사진 영구 저장")
     col_m1, col_m2 = st.columns(2)
@@ -188,7 +224,6 @@ with tab_create:
         sel_topic = st.selectbox("주제 선택", QUIZ_TOPICS) if q_mode == "직접" else None
 
     if st.button("🚀 퀴즈 이미지 생성", type="primary", use_container_width=True):
-        # 가수 선정
         if mode == "직접 (최대 4명)" and sel_singers:
             options = sel_singers[:]
             if len(options) < 4:
@@ -200,33 +235,25 @@ with tab_create:
             options = wrongs + [correct]
         random.shuffle(options)
         
-        # 질문 선정
         winner = random.choice(options)
         question = (sel_topic if q_mode == "직접" else random.choice(QUIZ_TOPICS)).format(name=winner)
         
-        # 상태 저장 (중요: 현재 가수 명단을 저장해야 수정 반영 가능)
         st.session_state['current_options'] = options
         st.session_state['last_q'] = question
-        # 이미지 최초 생성
         st.session_state['result_img'] = create_final_image(question, options, design)
 
-    # 결과 화면
     if 'result_img' in st.session_state:
         col_res1, col_res2 = st.columns([1, 1.2])
         with col_res1:
-            st.info("Tip: 사이드바에서 디자인과 하단 문구를 수정할 수 있습니다.")
-            # 상단 멘트 수정 입력창
+            st.info("Tip: 왼쪽 [위치/배치] 탭에서 사진 크기와 위치를 조절하세요.")
             new_q_val = st.text_area("상단 질문 멘트 수정", value=st.session_state.get('last_q', ''))
             
         with col_res2:
-            # === [핵심 수정] 수정사항 반영 버튼 ===
-            if st.button("✨ 디자인/멘트 수정사항 반영", type="primary", use_container_width=True):
-                # 저장된 가수 명단이 있을 때만 실행
+            if st.button("✨ 수정사항 반영 (위치/크기/멘트)", type="primary", use_container_width=True):
                 if 'current_options' in st.session_state:
-                    # 입력된 새 멘트와 현재 사이드바 디자인 설정으로 다시 그리기
                     st.session_state['result_img'] = create_final_image(new_q_val, st.session_state['current_options'], design)
-                    st.session_state['last_q'] = new_q_val # 수정된 멘트 저장
-                    st.rerun() # 즉시 반영
+                    st.session_state['last_q'] = new_q_val
+                    st.rerun()
 
             st.image(st.session_state['result_img'], caption="최종 결과물", use_container_width=True)
             buf = BytesIO()
