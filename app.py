@@ -5,7 +5,7 @@ from io import BytesIO
 import os
 
 # --- [1. 기본 설정 및 폴더 준비] ---
-st.set_page_config(page_title="쇼츠 생성기 (레이아웃 조절)", page_icon="📐", layout="wide")
+st.set_page_config(page_title="쇼츠 생성기 (번호추가)", page_icon="🔢", layout="wide")
 
 IMAGE_SAVE_DIR = "images"
 if not os.path.exists(IMAGE_SAVE_DIR):
@@ -64,7 +64,7 @@ def create_final_image(q_text, names, design):
     font_name = get_font(design['n_size'])
     font_bottom = get_font(design['b_size'])
     
-    # 1. 상단 질문 그리기 (위치 조절 가능)
+    # 1. 상단 질문 그리기
     top_y = design['layout_top_y']
     try:
         bbox = draw.textbbox((0, 0), q_text, font=font_title)
@@ -73,17 +73,15 @@ def create_final_image(q_text, names, design):
     except:
         draw.text((50, top_y), q_text, fill=design['t_color'])
 
-    # 2. 이미지 배치 (크기 & 위치 조절 가능)
+    # 2. 이미지 배치
     img_w = design['layout_img_w']
-    img_h = int(img_w * 1.1) # 비율 유지 (세로가 조금 더 김)
+    img_h = int(img_w * 1.1)
     start_y = design['layout_img_y']
-    gap = 40 # 사진 사이 간격
+    gap = 40 
     
-    # 중앙 정렬을 위한 X 시작점 계산
     total_w = (img_w * 2) + gap
     start_x = (1080 - total_w) // 2
 
-    # 좌표 계산: (왼쪽위, 오른쪽위, 왼쪽아래, 오른쪽아래)
     positions = [
         (start_x, start_y), 
         (start_x + img_w + gap, start_y), 
@@ -97,7 +95,6 @@ def create_final_image(q_text, names, design):
         if img is None:
             img = Image.new('RGB', size, (50, 50, 50))
         
-        # 리사이즈
         img_ratio = img.width / img.height
         target_ratio = size[0] / size[1]
         if img_ratio > target_ratio:
@@ -112,23 +109,26 @@ def create_final_image(q_text, names, design):
         img = img.resize(size, Image.LANCZOS)
         canvas.paste(img, pos)
 
-        # 이름표 (사진 크기에 맞춰 위치 조정)
-        tag_w = int(img_w * 0.9) # 사진 너비의 90%
+        # 이름표
+        tag_w = int(img_w * 0.9)
         tag_h = 110
         tag_x = pos[0] + (size[0] - tag_w) // 2
         tag_y = pos[1] + size[1] - (tag_h // 2)
         
         draw.rounded_rectangle([tag_x, tag_y, tag_x + tag_w, tag_y + tag_h], radius=20, fill=design['tag_bg'], outline=design['border'], width=5)
         
-        # 이름
+        # --- [수정된 부분: 이름 앞에 번호 붙이기] ---
+        display_name = f"{i+1}  {name}" # 1  가수이름 (숫자와 이름 사이 띄어쓰기 2칸)
+        
         try:
-            bbox_name = draw.textbbox((0, 0), name, font=font_name)
+            bbox_name = draw.textbbox((0, 0), display_name, font=font_name)
             name_w = bbox_name[2] - bbox_name[0]
             name_h = bbox_name[3] - bbox_name[1]
-            draw.text((tag_x + (tag_w - name_w) / 2, tag_y + (tag_h - name_h) / 2 - 10), name, font=font_name, fill=design['n_color'])
-        except: pass
+            draw.text((tag_x + (tag_w - name_w) / 2, tag_y + (tag_h - name_h) / 2 - 10), display_name, font=font_name, fill=design['n_color'])
+        except: 
+            draw.text((tag_x+20, tag_y+30), display_name, fill=design['n_color'])
 
-    # 3. 하단 문구 그리기 (위치 조절 가능)
+    # 3. 하단 문구 그리기
     bottom_text = design.get('bottom_text', '')
     bot_y = design['layout_bot_y']
     
@@ -142,7 +142,7 @@ def create_final_image(q_text, names, design):
     return canvas
 
 # --- [4. 메인 UI] ---
-st.title("📐 쇼츠 생성기 (레이아웃 조절)")
+st.title("🔢 쇼츠 생성기 (번호 추가됨)")
 
 if not os.path.exists(FONT_FILE):
     st.error(f"⚠️ '{FONT_FILE}' 파일이 필요합니다.")
@@ -151,7 +151,6 @@ if not os.path.exists(FONT_FILE):
 with st.sidebar:
     st.header("🎨 디자인 & 레이아웃")
     
-    # 탭으로 분리하여 깔끔하게 정리
     tab_color, tab_layout, tab_text = st.tabs(["색상/크기", "위치/배치", "문구"])
     
     with tab_color:
@@ -170,14 +169,12 @@ with st.sidebar:
 
     with tab_layout:
         st.info("💡 여기서 화면 구성을 조절하세요")
-        layout_top_y = st.slider("상단 질문 위치 (Y)", 50, 500, 150, help="질문을 위아래로 이동")
-        
+        layout_top_y = st.slider("상단 질문 위치 (Y)", 50, 500, 150)
         st.divider()
-        layout_img_w = st.slider("사진 크기 (너비)", 300, 500, 420, help="사진 크기를 조절")
-        layout_img_y = st.slider("사진 뭉치 위치 (Y)", 200, 1000, 420, help="사진 전체를 위아래로 이동")
-        
+        layout_img_w = st.slider("사진 크기 (너비)", 300, 500, 420)
+        layout_img_y = st.slider("사진 뭉치 위치 (Y)", 200, 1000, 420)
         st.divider()
-        layout_bot_y = st.slider("하단 문구 위치 (Y)", 1200, 1850, 1600, help="하단 문구를 위아래로 이동")
+        layout_bot_y = st.slider("하단 문구 위치 (Y)", 1200, 1850, 1600)
 
     with tab_text:
         bottom_text_input = st.text_area("하단 문구 내용", "화면 두번 터치\n댓글로 정답을 남겨주세요!")
@@ -186,11 +183,7 @@ with st.sidebar:
         'bg': bg_color, 't_color': t_color, 'tag_bg': tag_bg, 'border': border, 'n_color': n_color,
         't_size': t_size, 'n_size': n_size, 'b_size': b_size,
         'bottom_text': bottom_text_input,
-        # 레이아웃 변수 추가
-        'layout_top_y': layout_top_y,
-        'layout_img_w': layout_img_w,
-        'layout_img_y': layout_img_y,
-        'layout_bot_y': layout_bot_y
+        'layout_top_y': layout_top_y, 'layout_img_w': layout_img_w, 'layout_img_y': layout_img_y, 'layout_bot_y': layout_bot_y
     }
 
 # 탭 구성
