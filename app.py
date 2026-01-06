@@ -5,14 +5,12 @@ from io import BytesIO
 import os
 
 # --- [1. 기본 설정 및 폴더 준비] ---
-st.set_page_config(page_title="쇼츠 생성기 (사진관리자)", page_icon="🗂️", layout="wide")
+st.set_page_config(page_title="쇼츠 생성기 (최종보완)", page_icon="✨", layout="wide")
 
-# 사진이 저장될 진짜 내 컴퓨터 폴더
 IMAGE_SAVE_DIR = "images"
 if not os.path.exists(IMAGE_SAVE_DIR):
     os.makedirs(IMAGE_SAVE_DIR)
 
-# 폰트 파일 이름 (같은 폴더에 있어야 함)
 FONT_FILE = "NanumGothic-ExtraBold.ttf"
 
 # --- [2. 데이터 설정] ---
@@ -34,9 +32,7 @@ QUIZ_TOPICS = [
 # --- [3. 핵심 기능 함수] ---
 
 def save_image_to_disk(singer_name, uploaded_file):
-    """업로드한 파일을 내 컴퓨터 images 폴더에 저장"""
     try:
-        # 무조건 jpg로 변환해서 저장 (관리가 편함)
         img = Image.open(uploaded_file).convert("RGB")
         file_path = os.path.join(IMAGE_SAVE_DIR, f"{singer_name}.jpg")
         img.save(file_path, "JPEG", quality=100)
@@ -46,8 +42,6 @@ def save_image_to_disk(singer_name, uploaded_file):
         return False
 
 def load_image_from_disk(singer_name):
-    """내 컴퓨터 images 폴더에서 파일 불러오기"""
-    # jpg, png, jpeg 등 확인
     for ext in ['jpg', 'jpeg', 'png', 'JPG', 'PNG']:
         file_path = os.path.join(IMAGE_SAVE_DIR, f"{singer_name}.{ext}")
         if os.path.exists(file_path):
@@ -57,7 +51,6 @@ def load_image_from_disk(singer_name):
     return None
 
 def get_font(size):
-    """폰트 로딩 (로컬 파일 우선)"""
     if os.path.exists(FONT_FILE):
         return ImageFont.truetype(FONT_FILE, size)
     else:
@@ -69,8 +62,9 @@ def create_final_image(q_text, names, design):
     
     font_title = get_font(design['t_size'])
     font_name = get_font(design['n_size'])
+    font_bottom = get_font(design['b_size']) # 하단 문구 폰트
     
-    # 질문 그리기
+    # 1. 상단 질문 그리기
     try:
         bbox = draw.textbbox((0, 0), q_text, font=font_title)
         text_w = bbox[2] - bbox[0]
@@ -78,20 +72,18 @@ def create_final_image(q_text, names, design):
     except:
         draw.text((50, 150), q_text, fill=design['t_color'])
 
-    positions = [(50, 500), (560, 500), (50, 1100), (560, 1100)]
-    size = (470, 550)
+    # 2. 이미지 배치 (크기 줄이고 위로 올림)
+    # 기존 Y위치: 500, 1100 -> 변경: 450, 1050 (위로 올림)
+    positions = [(70, 450), (560, 450), (70, 1050), (560, 1050)]
+    # 기존 사이즈: (470, 550) -> 변경: (450, 500) (조금 줄임)
+    size = (450, 500)
 
     for i, (name, pos) in enumerate(zip(names, positions)):
-        # 저장된 이미지 불러오기
         img = load_image_from_disk(name)
-        
         if img is None:
-            # 없으면 회색 박스 + 물음표
             img = Image.new('RGB', size, (50, 50, 50))
-            draw_temp = ImageDraw.Draw(img)
-            # 물음표
         
-        # 이미지 크롭 & 리사이즈
+        # 리사이즈
         img_ratio = img.width / img.height
         target_ratio = size[0] / size[1]
         if img_ratio > target_ratio:
@@ -107,7 +99,7 @@ def create_final_image(q_text, names, design):
         canvas.paste(img, pos)
 
         # 이름표
-        tag_w, tag_h = 400, 120
+        tag_w, tag_h = 380, 110 # 이름표도 살짝 줄임
         tag_x = pos[0] + (size[0] - tag_w) // 2
         tag_y = pos[1] + size[1] - (tag_h // 2)
         
@@ -119,76 +111,84 @@ def create_final_image(q_text, names, design):
             name_w = bbox_name[2] - bbox_name[0]
             name_h = bbox_name[3] - bbox_name[1]
             draw.text((tag_x + (tag_w - name_w) / 2, tag_y + (tag_h - name_h) / 2 - 10), name, font=font_name, fill=design['n_color'])
-        except:
-             draw.text((tag_x+50, tag_y+30), name, fill=design['n_color'])
+        except: pass
+
+    # 3. 하단 문구 그리기 (새로 추가된 영역)
+    bottom_text = design.get('bottom_text', '')
+    if bottom_text:
+        try:
+            bbox_b = draw.textbbox((0, 0), bottom_text, font=font_bottom)
+            text_bw = bbox_b[2] - bbox_b[0]
+            # Y좌표 1750 부근에 배치 (하단 여백 활용)
+            draw.text(((1080 - text_bw) / 2, 1750), bottom_text, font=font_bottom, fill=design['t_color'], align="center")
+        except: pass
 
     return canvas
 
 # --- [4. 메인 UI] ---
-st.title("🗂️ 쇼츠 생성기 (사진 관리자)")
+st.title("✨ 쇼츠 생성기 (최종 보완판)")
 
 if not os.path.exists(FONT_FILE):
-    st.error(f"⚠️ 'NanumGothic-ExtraBold.ttf' 파일이 없습니다! 같은 폴더에 넣어주세요.")
+    st.error(f"⚠️ '{FONT_FILE}' 파일이 필요합니다.")
 
-# 디자인 설정
+# 디자인 설정 (사이드바)
 with st.sidebar:
-    st.header("🎨 디자인")
-    bg_color = st.color_picker("배경색", "#000000")
-    t_color = st.color_picker("질문 색", "#FFFF00")
-    tag_bg = st.color_picker("이름표 배경", "#000000")
-    border = st.color_picker("테두리 색", "#00FF00")
-    n_color = st.color_picker("이름 색", "#00FF00")
-    st.divider()
-    t_size = st.slider("질문 크기", 50, 150, 90)
-    n_size = st.slider("이름 크기", 40, 120, 65)
-    design = {'bg': bg_color, 't_color': t_color, 'tag_bg': tag_bg, 'border': border, 'n_color': n_color, 't_size': t_size, 'n_size': n_size}
+    st.header("🎨 디자인 & 문구")
+    
+    with st.expander("색상 설정", expanded=False):
+        bg_color = st.color_picker("배경색", "#000000")
+        t_color = st.color_picker("질문/하단 색", "#FFFF00")
+        tag_bg = st.color_picker("이름표 배경", "#000000")
+        border = st.color_picker("테두리 색", "#00FF00")
+        n_color = st.color_picker("이름 색", "#00FF00")
+        
+    with st.expander("크기 설정", expanded=True):
+        t_size = st.slider("상단 질문 크기", 50, 150, 90)
+        n_size = st.slider("이름 크기", 40, 120, 65)
+        b_size = st.slider("하단 문구 크기", 30, 100, 50) # 하단 크기 추가
 
-# 탭 분리: 1. 사진 등록 / 2. 퀴즈 만들기
+    st.divider()
+    st.header("📝 하단 문구")
+    bottom_text_input = st.text_area("하단에 들어갈 문구를 입력하세요", "구독과 좋아요는 사랑입니다💖\n댓글로 정답을 남겨주세요!")
+    
+    design = {
+        'bg': bg_color, 't_color': t_color, 'tag_bg': tag_bg, 'border': border, 'n_color': n_color,
+        't_size': t_size, 'n_size': n_size, 'b_size': b_size,
+        'bottom_text': bottom_text_input # 하단 문구 저장
+    }
+
+# 탭 구성
 tab_manage, tab_create = st.tabs(["1. 📸 사진 등록/관리", "2. 🚀 퀴즈 만들기"])
 
-# --- [탭 1: 사진 등록] ---
+# [탭 1: 사진 등록] (기존과 동일)
 with tab_manage:
-    st.subheader("가수 사진을 영구 저장하세요")
-    st.caption(f"여기서 저장하면 내 컴퓨터 '{IMAGE_SAVE_DIR}' 폴더에 파일이 생성됩니다.")
-    
-    col_m1, col_m2 = st.columns([1, 1])
-    
+    st.subheader("가수 사진 영구 저장")
+    col_m1, col_m2 = st.columns(2)
     with col_m1:
-        target_singer = st.selectbox("가수 선택", TROT_SINGERS_TOP50)
-        uploaded_file = st.file_uploader(f"'{target_singer}' 사진 업로드", type=["jpg", "png", "jpeg"])
-        
-        if uploaded_file:
-            st.image(uploaded_file, caption="업로드할 사진 미리보기", width=200)
-            if st.button("💾 이 사진으로 영구 저장", type="primary"):
-                if save_image_to_disk(target_singer, uploaded_file):
-                    st.success(f"저장 완료! '{target_singer}.jpg' 파일이 생성되었습니다.")
-                    st.rerun() # 새로고침해서 반영
-
+        target = st.selectbox("가수 선택", TROT_SINGERS_TOP50)
+        up_file = st.file_uploader(f"'{target}' 사진 업로드", type=["jpg", "png", "jpeg"])
+        if up_file and st.button("💾 저장하기", type="primary"):
+            if save_image_to_disk(target, up_file):
+                st.success("저장 완료!")
+                st.rerun()
     with col_m2:
-        st.write(f"현재 저장된 '{target_singer}' 사진:")
-        saved_img = load_image_from_disk(target_singer)
-        if saved_img:
-            st.image(saved_img, width=200)
-            st.info("✅ 이미 저장된 사진이 있습니다.")
-        else:
-            st.warning("❌ 아직 저장된 사진이 없습니다.")
+        saved = load_image_from_disk(target)
+        if saved: st.image(saved, width=200, caption=f"저장된 {target} 사진")
+        else: st.warning("저장된 사진이 없습니다.")
 
-# --- [탭 2: 퀴즈 만들기] ---
+# [탭 2: 퀴즈 만들기]
 with tab_create:
-    st.subheader("저장된 사진으로 퀴즈 만들기")
-    
+    st.subheader("퀴즈 생성")
     c1, c2 = st.columns(2)
     with c1:
         mode = st.radio("가수 구성", ["랜덤", "직접 (최대 4명)"], horizontal=True)
-        sel_singers = []
-        if mode == "직접 (최대 4명)":
-            sel_singers = st.multiselect("가수 선택", TROT_SINGERS_TOP50, max_selections=4)
+        sel_singers = st.multiselect("가수 선택", TROT_SINGERS_TOP50, max_selections=4) if mode == "직접 (최대 4명)" else []
     with c2:
         q_mode = st.radio("질문 선택", ["랜덤", "직접"], horizontal=True)
         sel_topic = st.selectbox("주제 선택", QUIZ_TOPICS) if q_mode == "직접" else None
 
     if st.button("🚀 퀴즈 이미지 생성", type="primary", use_container_width=True):
-        # 가수 선정 로직
+        # 가수 선정
         if mode == "직접 (최대 4명)" and sel_singers:
             options = sel_singers[:]
             if len(options) < 4:
@@ -198,31 +198,37 @@ with tab_create:
             correct = random.choice(TROT_SINGERS_TOP50)
             wrongs = random.sample([s for s in TROT_SINGERS_TOP50 if s != correct], 3)
             options = wrongs + [correct]
-        
         random.shuffle(options)
+        
+        # 질문 선정
         winner = random.choice(options)
         question = (sel_topic if q_mode == "직접" else random.choice(QUIZ_TOPICS)).format(name=winner)
         
-        # 이미지 생성
+        # 상태 저장 (중요: 현재 가수 명단을 저장해야 수정 반영 가능)
+        st.session_state['current_options'] = options
+        st.session_state['last_q'] = question
+        # 이미지 최초 생성
         st.session_state['result_img'] = create_final_image(question, options, design)
-        st.session_state['last_q'] = question # 멘트 수정을 위해 저장
 
-    # 결과 보여주기
+    # 결과 화면
     if 'result_img' in st.session_state:
         col_res1, col_res2 = st.columns([1, 1.2])
-        
         with col_res1:
-            st.info("💡 사진이 비어있다면 [1. 사진 등록] 탭에서 사진을 저장해주세요.")
-            new_q_val = st.text_area("멘트 수정", value=st.session_state.get('last_q', ''))
+            st.info("Tip: 사이드바에서 디자인과 하단 문구를 수정할 수 있습니다.")
+            # 상단 멘트 수정 입력창
+            new_q_val = st.text_area("상단 질문 멘트 수정", value=st.session_state.get('last_q', ''))
             
         with col_res2:
-            if st.button("✨ 디자인/멘트 수정사항 반영"):
-                # 현재 설정으로 다시 그리기 (가수 명단은 유지)
-                # (복잡도를 줄이기 위해 새로 생성하는게 아니라, 기존 명단으로 다시 그림)
-                pass 
-                
+            # === [핵심 수정] 수정사항 반영 버튼 ===
+            if st.button("✨ 디자인/멘트 수정사항 반영", type="primary", use_container_width=True):
+                # 저장된 가수 명단이 있을 때만 실행
+                if 'current_options' in st.session_state:
+                    # 입력된 새 멘트와 현재 사이드바 디자인 설정으로 다시 그리기
+                    st.session_state['result_img'] = create_final_image(new_q_val, st.session_state['current_options'], design)
+                    st.session_state['last_q'] = new_q_val # 수정된 멘트 저장
+                    st.rerun() # 즉시 반영
+
             st.image(st.session_state['result_img'], caption="최종 결과물", use_container_width=True)
-            
             buf = BytesIO()
             st.session_state['result_img'].save(buf, format="JPEG", quality=100)
-            st.download_button("💾 이미지 다운로드", buf.getvalue(), "shorts.jpg", "image/jpeg", type="primary", use_container_width=True)
+            st.download_button("💾 이미지 다운로드", buf.getvalue(), "shorts_final.jpg", "image/jpeg", type="primary", use_container_width=True)
