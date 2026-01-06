@@ -8,7 +8,7 @@ import numpy as np
 from duckduckgo_search import DDGS
 
 # --- [1. 기본 설정] ---
-st.set_page_config(page_title="쇼츠 자동 생성기 (저작권 보호 Ver)", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="쇼츠 자동 생성기 (Pro Ver)", page_icon="🛡️", layout="wide")
 
 # --- [2. 비밀번호 보안] ---
 def check_password():
@@ -25,7 +25,7 @@ def password_entered():
 
 if not check_password(): st.stop()
 
-# --- [3. 데이터 설정] ---
+# --- [3. 데이터 확장: 가수 100명 & 주제 100개] ---
 TROT_SINGERS = [
     "임영웅","영탁","이찬원","김호중","정동원","장민호","김희재","나훈아","남진","송가인",
     "장윤정","홍진영","박군","박서진","진성","설운도","태진아","송대관","김연자","주현미",
@@ -36,18 +36,49 @@ TROT_SINGERS = [
     "박주희","김수찬","나태주","강혜연","윤수현","조정민","설하윤","류지광","김경민","남승민",
     "황윤성","강태관","김나희","정미애","홍자","정다경","은가은","별사랑","김의영","황민호",
     "황민우","이대원","신인선","노지훈","양지원","한강","재하","신승태","최우진","성리",
-    "추혁진","박상철","서주경","한혜진","유지나","김용필","조명섭"
+    "추혁진","박상철","서주경","한혜진","유지나","김용필","조명섭","지원이","윙크","소유미",
+    "강예슬","김소유","두리","박성연","장하온","한담희","현진우","최진희","심수봉","이용",
+    "조용필","최백호","윤항기","김국환","편승엽","오승근","이자연","김용임","서지오","김혜림"
 ]
 
-QUIZ_TEMPLATES = [
-    "2025년 트로트 흐름을\n이끌었던 가수는?",
-    "다음 중 '{name}' 님은\n몇 번일까요?",
-    "이 멋진 무대의 주인공,\n'{name}'을 찾아보세요!"
+# 주제(퀴즈 질문) 100개 리스트
+QUIZ_TOPICS = [
+    "2025년 트로트계를 평정한 가수는?", "가장 감성적인 보이스의 주인공은?", "퍼포먼스의 제왕은 누구일까요?", 
+    "다음 중 '{name}' 님은 어디에?", "효도 관광 함께 가고 싶은 가수 1위는?", "트로트계의 아이돌, 이 사람은?",
+    "천상의 고음을 가진 가수는?", "행사의 여왕/제왕은 누구?", "첫사랑 기억 조작하게 만드는 가수는?",
+    "실물이 더 빛나는 가수는 누구?", "팬바보로 소문난 가수는?", "한복이 가장 잘 어울리는 사람은?",
+    "트로트 신동에서 거장으로!", "국민 사위/며느리 삼고 싶은 1위는?", "고속도로 아이돌이라 불리는 사람은?",
+    "전설의 무대를 남긴 주인공은?", "작곡가들이 사랑하는 목소리는?", "예능감까지 갖춘 만능 엔터테이너는?",
+    "비 오는 날 듣고 싶은 목소리는?", "꿀 떨어지는 눈빛의 소유자는?", "지치지 않는 체력의 소유자는?",
+    "팬클럽 화력이 가장 뜨거운 가수는?", "광고계를 휩쓴 블루칩은?", "차세대 트로트 황제는?",
+    "정통 트로트의 계보를 잇는 자는?", "퓨전 트로트의 선두주자는?", "가장 스타일리시한 트로트 스타는?",
+    "안경이 잘 어울리는 지적인 이미지는?", "미소가 아름다운 스마일맨은?", "카리스마 넘치는 무대 장인은?",
+    "눈물샘을 자극하는 감동의 목소리는?", "사이다 같은 시원한 가창력은?", "귀공자/공주님 같은 외모는?",
+    "반전 매력의 소유자는?", "연기까지 섭렵한 만능캐는?", "순수 청년 이미지의 가수는?",
+    "독보적인 음색 깡패는?", "무대 위 댄스 머신은?", "라디오 DJ로도 활약한 사람은?",
+    "군통령이라 불리는 가수는?", "오디션 프로그램 우승 후보 0순위였던?", "최단기간 전석 매진 신화의 주인공?",
+    "해외에서도 통할 글로벌 스타는?", "슈트핏/드레스핏이 완벽한 사람은?", "애교가 가장 많은 멤버는?",
+    "리더십이 뛰어난 맏형/맏언니는?", "팀의 막내 같은 동안 외모는?", "요리까지 잘하는 1등 신랑/신부감은?",
+    "축구/운동을 사랑하는 건강 미남/미녀는?", "팬서비스가 가장 혜자로운 스타는?", "성대모사를 잘하는 재간둥이는?",
+    "트로트 차트 1위를 가장 오래한 사람은?", "듀엣 무대를 함께 하고픈 가수 1위?", "봄날의 햇살 같은 가수는?",
+    "여름 무더위를 날려버릴 목소리는?", "가을 감성에 딱 맞는 목소리는?", "겨울 난로 같은 따뜻한 사람은?",
+    "안무 습득력이 가장 빠른 사람은?", "사복 패션 센스가 뛰어난 사람은?", "반려동물을 사랑하는 집사는?",
+    "어린 시절 사진과 똑같은 사람은?", "가장 효자/효녀일 것 같은 스타는?", "학창 시절 인기 짱이었을 것 같은?",
+    "CF 킹/퀸은 누구?", "유튜브 조회수 대박의 주인공은?", "실시간 검색어를 장악한 스타는?",
+    "콘서트 티켓팅이 가장 치열한 가수는?", "팬레터를 가장 많이 받을 것 같은?", "선배 가수들에게 사랑받는 후배는?",
+    "후배들을 잘 챙겨주는 든든한 선배는?", "트로트 장르의 벽을 깬 가수는?", "발라드도 잘 부르는 트로트 가수는?",
+    "락 스피릿이 충만한 트로트 가수는?", "국악 베이스의 깊은 소리꾼은?", "성악 발성으로 웅장함을 주는?",
+    "가장 다재다능한 '부캐' 부자는?", "지역 홍보대사로 활약 중인 사람은?", "기부 천사로 알려진 따뜻한 마음은?",
+    "신곡 발표만 하면 대박 나는 믿듣가?", "역주행 신화를 쓴 주인공은?", "오빠/누나 부대를 몰고 다니는?",
+    "전국 팔도를 누비는 홍길동은?", "무대 매너 점수 100점 만점!", "엔딩 요정은 바로 나!",
+    "카메라 아이컨택이 심쿵인 가수는?", "목소리만 들어도 힐링되는 치유캐?", "인생 2회차 같은 깊은 감성은?",
+    "트로트계의 베토벤, 작사/작곡 능력자?", "가장 로맨틱한 보이스는?", "섹시한 매력이 넘치는 스타는?",
+    "귀여움 한도 초과인 스타는?", "청량함 그 자체인 인간 사이다!", "분위기 메이커는 누구?",
+    "가장 성실하기로 소문난 노력파는?", "연습벌레로 알려진 가수는?", "무명 시절을 딛고 일어선 인간 승리!",
+    "지금 이 순간 가장 빛나는 별!", "트로트의 미래를 이끌어갈 주역!", "영원한 우리의 오빠/언니!"
 ]
 
 # --- [4. 핵심 기능 함수] ---
-
-# 4-1. 이미지 검색 (DuckDuckGo)
 def search_image_auto(query):
     """저작권 안전지대인 위키미디어/뉴스 위주로 검색"""
     try:
@@ -55,94 +86,63 @@ def search_image_auto(query):
             keywords = [f"{query} wiki image", f"{query} singer performance"]
             for key in keywords:
                 results = list(ddgs.images(key, max_results=1))
-                if results:
-                    return results[0]['image']
-    except Exception as e:
-        print(f"검색 실패: {e}")
+                if results: return results[0]['image']
+    except Exception: pass
     return None
 
-# 4-2. 스케치 변환 (OpenCV)
 def convert_to_sketch(pil_image):
-    """사진을 연필 스케치 그림처럼 변환"""
+    """사진을 연필 스케치 그림처럼 변환 (필수 적용)"""
     img_np = np.array(pil_image)
-    
-    # 컬러 이미지가 아닐 경우 처리
-    if len(img_np.shape) == 2:
-        gray = img_np
-    else:
-        gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-    
+    if len(img_np.shape) == 2: gray = img_np
+    else: gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
     inverted = 255 - gray
     blurred = cv2.GaussianBlur(inverted, (21, 21), 0)
     inverted_blurred = 255 - blurred
-    
-    # 0으로 나누기 방지
     sketch = cv2.divide(gray, inverted_blurred, scale=256.0)
-    
     return Image.fromarray(cv2.cvtColor(sketch, cv2.COLOR_GRAY2RGB))
 
-# 4-3. 폰트 로드 (캐싱 적용) - 바이트 데이터 반환
 @st.cache_resource
 def load_fonts():
     font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-ExtraBold.ttf"
     try:
         response = requests.get(font_url, timeout=10)
-        return BytesIO(response.content) # BytesIO 객체 반환
-    except Exception as e:
-        st.warning(f"폰트 다운로드 실패 ({e}). 기본 폰트를 사용합니다.")
-        return None
+        return BytesIO(response.content)
+    except: return None
 
-# 4-4. 최종 이미지 합성 (무조건 스케치 필터 적용)
 def create_shorts_image(q_text, names, image_sources):
-    # 캔버스 생성 (FHD 세로)
     canvas = Image.new('RGB', (1080, 1920), (0, 0, 0))
     draw = ImageDraw.Draw(canvas)
     
-    # 폰트 설정 (오류 발생 시 기본 폰트 사용)
     font_bytes = load_fonts()
     try:
         if font_bytes:
-            # BytesIO 객체에서 폰트 로드
             font_title = ImageFont.truetype(font_bytes, 100)
-            # 동일한 BytesIO 객체를 다시 사용하기 위해 seek(0) 호출
             font_bytes.seek(0)
             font_name = ImageFont.truetype(font_bytes, 70)
-        else:
-            raise Exception("Font data not found")
-    except Exception as e:
-        # st.error(f"폰트 로드 오류: {e}") # 디버깅용
+        else: raise Exception
+    except:
         font_title = ImageFont.load_default()
         font_name = ImageFont.load_default()
 
-    # 제목 그리기 (중앙 정렬 계산)
     bbox = draw.textbbox((0, 0), q_text, font=font_title)
     text_w = bbox[2] - bbox[0]
     draw.text(((1080 - text_w) / 2, 150), q_text, font=font_title, fill="#FFFF00", align="center")
 
-    # 이미지 배치 좌표 (2x2 격자)
     positions = [(50, 500), (560, 500), (50, 1100), (560, 1100)]
     size = (470, 550)
 
     for i, (name, source, pos) in enumerate(zip(names, image_sources, positions)):
         img = None
         try:
-            # 소스 타입에 따라 이미지 로드
-            if source is None:
-                pass
-            elif isinstance(source, BytesIO): # 직접 업로드
-                img = Image.open(source).convert("RGB")
-            elif isinstance(source, str) and source.startswith("http"): # 검색 URL
+            if isinstance(source, BytesIO): img = Image.open(source).convert("RGB")
+            elif isinstance(source, str) and source.startswith("http"):
                 response = requests.get(source, timeout=5)
                 img = Image.open(BytesIO(response.content)).convert("RGB")
             
             if img:
-                # 무조건 스케치 필터 적용
-                img = convert_to_sketch(img)
-
-                # 크롭 및 리사이즈 (비율 유지)
+                img = convert_to_sketch(img) # 무조건 스케치 적용
                 img_ratio = img.width / img.height
                 target_ratio = size[0] / size[1]
-                
                 if img_ratio > target_ratio:
                     new_width = int(img.height * target_ratio)
                     offset = (img.width - new_width) // 2
@@ -151,26 +151,17 @@ def create_shorts_image(q_text, names, image_sources):
                     new_height = int(img.width / target_ratio)
                     offset = (img.height - new_height) // 2
                     img = img.crop((0, offset, img.width, offset + new_height))
-                
                 img = img.resize(size, Image.LANCZOS)
-        except Exception as e:
-            print(f"이미지 처리 중 오류: {e}")
-            img = None
+        except: img = None
 
-        # 이미지 로드 실패 시 회색 박스
-        if img is None:
-            img = Image.new('RGB', size, (50, 50, 50))
-            
+        if img is None: img = Image.new('RGB', size, (50, 50, 50))
         canvas.paste(img, pos)
 
-        # 이름표 달기
         tag_w, tag_h = 300, 120
         tag_x = pos[0] + (size[0] - tag_w) // 2
         tag_y = pos[1] + size[1] - (tag_h // 2)
-        
         draw.rounded_rectangle([tag_x, tag_y, tag_x + tag_w, tag_y + tag_h], radius=20, fill="black", outline="#00FF00", width=3)
         
-        # 이름 중앙 정렬
         bbox_name = draw.textbbox((0, 0), name, font=font_name)
         name_w = bbox_name[2] - bbox_name[0]
         name_h = bbox_name[3] - bbox_name[1]
@@ -178,72 +169,99 @@ def create_shorts_image(q_text, names, image_sources):
 
     return canvas
 
-# --- [5. 메인 UI] ---
-st.title("🛡️ 쇼츠 자동 생성기 (저작권 회피 모드)")
-st.markdown("모든 이미지는 **자동으로 '스케치 그림'으로 변환**되어 저작권/초상권 위험을 줄입니다.")
+# --- [5. 메인 UI 및 로직] ---
+st.title("🛡️ 쇼츠 자동 생성기 (Pro Ver)")
+st.markdown("인물과 주제를 **랜덤**으로 설정하거나, 탭에서 **직접 선택**할 수 있습니다.")
 
-# 사이드바 설정 (스케치 옵션 제거됨)
-# with st.sidebar:
-#     st.header("⚙️ 안전 설정")
-#     use_sketch = st.checkbox("🎨 스케치 필터 적용 (추천)", value=True, help="사진을 그림처럼 바꿔서 저작권 봇을 피합니다.")
+# --- [선택 UI: 탭 활용] ---
+tab_singer, tab_topic = st.tabs(["👤 인물 설정", "📝 주제 설정"])
 
-# 버튼 클릭 시 퀴즈 생성
-if st.button("🚀 퀴즈 & 이미지 자동 생성", type="primary", use_container_width=True):
-    with st.spinner("🤖 저작권 안전지대에서 사진을 찾는 중..."):
-        correct_answer = random.choice(TROT_SINGERS)
+# 1. 인물 설정 탭
+with tab_singer:
+    st.info("퀴즈의 정답(메인 주인공)이 될 가수를 선택하세요.")
+    singer_mode = st.radio("인물 선택 방식", ["랜덤 추천", "직접 선택"], horizontal=True, key="s_mode")
+    
+    selected_main_singer = None
+    if singer_mode == "직접 선택":
+        selected_main_singer = st.selectbox("가수 목록 (100명)", TROT_SINGERS, key="s_select")
+    else:
+        st.markdown(f"**현재 상태:** 100명의 가수 중 랜덤으로 1명이 선택됩니다.")
+
+# 2. 주제 설정 탭
+with tab_topic:
+    st.info("영상 상단에 들어갈 질문(주제)을 선택하세요.")
+    topic_mode = st.radio("주제 선택 방식", ["랜덤 추천", "직접 선택"], horizontal=True, key="t_mode")
+    
+    selected_quiz_topic = None
+    if topic_mode == "직접 선택":
+        selected_quiz_topic = st.selectbox("주제 목록 (100개)", QUIZ_TOPICS, key="t_select")
+    else:
+        st.markdown(f"**현재 상태:** 100가지 주제 중 랜덤으로 1개가 선택됩니다.")
+
+st.divider()
+
+# --- [실행 버튼] ---
+if st.button("🚀 설정대로 퀴즈 생성하기", type="primary", use_container_width=True):
+    with st.spinner("🤖 설정을 반영하여 이미지를 찾고 있습니다..."):
+        # 1. 주인공(정답) 결정
+        if singer_mode == "직접 선택":
+            correct_answer = selected_main_singer
+        else:
+            correct_answer = random.choice(TROT_SINGERS)
+        
+        # 2. 오답(나머지 보기) 결정 - 항상 랜덤
         wrong_answers = random.sample([s for s in TROT_SINGERS if s != correct_answer], 3)
         options = wrong_answers + [correct_answer]
         random.shuffle(options)
         
-        question = random.choice(QUIZ_TEMPLATES).format(name=correct_answer)
+        # 3. 주제(질문) 결정
+        if topic_mode == "직접 선택":
+            question = selected_quiz_topic.format(name=correct_answer)
+        else:
+            question = random.choice(QUIZ_TOPICS).format(name=correct_answer)
         
+        # 4. 이미지 검색
         auto_urls = []
         for singer in options:
             url = search_image_auto(singer)
             auto_urls.append(url)
         
+        # 5. 세션에 저장
         st.session_state['auto_data'] = {
             'q': question,
             'names': options,
             'urls': auto_urls
         }
 
-# 생성된 데이터가 있으면 화면 표시
+# --- [결과 화면] ---
 if 'auto_data' in st.session_state:
     data = st.session_state['auto_data']
-    
     col_l, col_r = st.columns([1, 1.2])
     
     with col_l:
         st.subheader("🛠️ 사진 확인")
-        new_q = st.text_area("질문 멘트", value=data['q'], height=80)
+        new_q = st.text_area("질문 멘트 수정", value=data['q'], height=80)
         final_sources = []
         
         for i in range(4):
             st.markdown(f"**{i+1}번: {data['names'][i]}**")
-            # 이미지가 검색되었으면 보여주고, 아니면 업로드 버튼 표시
             if data['urls'][i]:
                 st.image(data['urls'][i], width=150)
                 final_sources.append(data['urls'][i])
             else:
-                st.warning("이미지를 찾지 못했습니다. 직접 올려주세요.")
-                uploaded = st.file_uploader(f"{data['names'][i]} 이미지", key=f"up_{i}")
+                st.warning("이미지 검색 실패. 직접 올려주세요.")
+                uploaded = st.file_uploader(f"{data['names'][i]} 업로드", key=f"up_{i}")
                 if uploaded: final_sources.append(uploaded)
                 else: final_sources.append(None)
             st.divider()
 
     with col_r:
         st.subheader("📸 최종 결과물")
-        # 4개 소스가 모두 준비되었는지 확인 (None이 섞여있어도 생성은 시도하되 회색박스 처리됨)
-        if st.button("✨ 결과물 다시 그리기", use_container_width=True):
-             pass # 버튼 누르면 리렌더링 효과
+        if st.button("✨ 결과물 다시 그리기", use_container_width=True): pass
 
-        # 무조건 스케치 필터 적용하여 생성
         final_img = create_shorts_image(new_q, data['names'], final_sources)
-        st.image(final_img, caption="완성본 (다운로드 가능)", use_container_width=True)
+        st.image(final_img, caption="완성본 (스케치 필터 자동 적용)", use_container_width=True)
         
-        # 다운로드 버튼
         buf = BytesIO()
         final_img.save(buf, format="JPEG", quality=95)
-        byte_im = buf.getvalue()
-        st.download_button("💾 이미지 다운로드", data=byte_im, file_name="shorts_safe.jpg", mime="image/jpeg", type="primary", use_container_width=True)
+        st.download_button("💾 이미지 다운로드", data=buf.getvalue(), file_name="shorts_pro.jpg", mime="image/jpeg", type="primary", use_container_width=True)
