@@ -1,9 +1,12 @@
 import streamlit as st
 import random
+import requests
+from PIL import Image, ImageDraw, ImageFont
+from io import BytesIO
 import urllib.parse
 
 # --- [기본 설정] ---
-st.set_page_config(page_title="트로트 쇼츠 메이커 (Design Pro)", page_icon="🎨", layout="wide")
+st.set_page_config(page_title="쇼츠 이미지 생성기", page_icon="📸", layout="wide")
 
 # --- [비밀번호 보안] ---
 def check_password():
@@ -18,148 +21,137 @@ def password_entered():
     else: st.error("비밀번호가 틀렸습니다.")
 if not check_password(): st.stop()
 
-# --- [데이터] ---
+# --- [데이터: 가수 리스트] ---
 TROT_SINGERS = ["임영웅","영탁","이찬원","김호중","정동원","장민호","김희재","나훈아","남진","송가인","장윤정","홍진영","박군","박서진","진성","설운도","태진아","송대관","김연자","주현미","양지은","전유진","안성훈","박지현","손태진","에녹","신성","민수현","김다현","김태연","요요미","마이진","린","박구윤","신유","금잔디","조항조","강진","김수희","하춘화","현숙","문희옥","김혜연","진해성","홍지윤","황영웅","공훈","김중연","박민수","나상도","최수호","진욱","박성온","정서주","배아현","오유진","미스김","나영","김소연","정슬","박주희","김수찬","나태주","강혜연","윤수현","조정민","설하윤","류지광","김경민","남승민","황윤성","강태관","김나희","정미애","홍자","정다경","은가은","별사랑","김의영","황민호","황민우","이대원","신인선","노지훈","양지원","한강","재하","신승태","최우진","성리","추혁진","박상철","서주경","한혜진","유지나","김용필","조명섭"]
-QUIZ_TEMPLATES = ["다음 중 '{name}' 님은 누구일까요?", "'{name}' 님의 사진을 찾아보세요!", "가수 '{name}' 님은 몇 번일까요?"]
+QUIZ_TEMPLATES = ["2025년 트로트 흐름을\n이끌었던 가수는?", "다음 중 '{name}' 님은\n몇 번일까요?", "이 멋진 무대의 주인공,\n'{name}'을 찾아보세요!"]
 
-# ==============================================================================
-# [사이드바] 디자인 & 컨트롤 패널
-# ==============================================================================
-with st.sidebar:
-    st.title("🎨 디자인 설정")
-    st.info("원하는 색상으로 화면을 꾸며보세요!")
+# --- [폰트 로드 함수 (한글 깨짐 방지)] ---
+@st.cache_resource
+def load_fonts():
+    # 나눔고딕 폰트 다운로드 (클라우드 환경용)
+    font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-ExtraBold.ttf"
+    response = requests.get(font_url)
+    return BytesIO(response.content)
+
+# --- [이미지 합성 엔진] ---
+def create_shorts_image(q_text, names, image_urls):
+    # 1. 검은색 캔버스 생성 (1080x1920 쇼츠 규격)
+    canvas = Image.new('RGB', (1080, 1920), (0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
     
-    # 1. 색상 선택기 (기본값: 요청하신 블랙/옐로우 테마)
-    bg_color = st.color_picker("🎨 배경색 (전체)", "#000000")
-    top_text_color = st.color_picker("⬆️ 위 글자색 (질문)", "#FFFF00")
-    name_text_color = st.color_picker("🅰️ 이름 글자색 (박스 안)", "#FFFFFF")
-    bottom_text_color = st.color_picker("⬇️ 아래 글자색 (대본)", "#00FF00")
+    # 폰트 로드
+    font_bytes = load_fonts()
+    font_title = ImageFont.truetype(font_bytes, 100) # 질문 폰트 크기
+    font_name = ImageFont.truetype(font_bytes, 70)   # 이름 폰트 크기
 
-    st.divider()
-    st.subheader("⚙️ 퀴즈 컨트롤")
-    generate_btn = st.button("🎲 새 퀴즈 뽑기 (Click)", type="primary", use_container_width=True)
+    # 2. 질문 그리기 (상단 중앙)
+    # 텍스트 중앙 정렬 계산
+    bbox = draw.textbbox((0, 0), q_text, font=font_title)
+    text_w = bbox[2] - bbox[0]
+    draw.text(((1080 - text_w) / 2, 150), q_text, font=font_title, fill="#FFFF00", align="center")
 
-# ==============================================================================
-# [CSS 스타일 동적 적용]
-# ==============================================================================
-st.markdown(f"""
-<style>
-    /* 전체 배경색 적용 */
-    .stApp {{ background-color: {bg_color}; }}
-    
-    /* 상단 질문 텍스트 스타일 */
-    .question-header {{
-        color: {top_text_color} !important;
-        font-size: 2.5rem; font-weight: bold; text-align: center; margin-bottom: 20px;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-    }}
+    # 3. 4분할 그리드 좌표 설정
+    # (x, y) 좌표: [왼쪽위, 오른쪽위, 왼쪽아래, 오른쪽아래]
+    positions = [(50, 500), (560, 500), (50, 1100), (560, 1100)]
+    size = (470, 550) # 각 사진 크기
 
-    /* 4분할 박스 스타일 (노란 테두리 박스) */
-    .choice-box {{
-        border: 3px solid #FFEB3B; /* 노란색 테두리 고정 */
-        border-radius: 15px; padding: 15px; text-align: center;
-        background-color: rgba(255, 255, 0, 0.1); /* 아주 연한 노란 배경 */
-        margin-bottom: 15px;
-    }}
+    for i, (name, url, pos) in enumerate(zip(names, image_urls, positions)):
+        # 이미지 다운로드 및 붙여넣기
+        try:
+            if url:
+                response = requests.get(url, timeout=3)
+                img = Image.open(BytesIO(response.content)).convert("RGB")
+                img = img.resize(size) # 크기 맞추기
+            else:
+                # URL 없으면 회색 박스
+                img = Image.new('RGB', size, (50, 50, 50))
+        except:
+            # 에러나면 빨간 박스
+            img = Image.new('RGB', size, (50, 0, 0))
 
-    /* 박스 안의 이름 텍스트 스타일 */
-    .singer-name {{
-        color: {name_text_color} !important;
-        font-size: 1.8rem; font-weight: bold; margin: 10px 0;
-        display: block;
-    }}
+        # 캔버스에 붙여넣기
+        canvas.paste(img, pos)
 
-    /* 사진 자리 표시용 스타일 */
-    .photo-placeholder {{
-        width: 100%; height: 200px; background-color: #333; color: #ddd;
-        display: flex; justify-content: center; align-items: center;
-        font-size: 1.2rem; border-radius: 10px; border: 2px dashed #555;
-        cursor: pointer; text-decoration: none;
-    }}
-    .photo-placeholder:hover {{ background-color: #444; border-color: #888; color: #fff; }}
+        # 4. 이름표 만들기 (검은 배경 + 초록 글씨)
+        # 이름표 배경 박스 그리기
+        tag_w, tag_h = 300, 120
+        tag_x = pos[0] + (size[0] - tag_w) // 2
+        tag_y = pos[1] + size[1] - (tag_h // 2) # 사진 하단에 걸치게
+        
+        # 둥근 사각형
+        draw.rounded_rectangle([tag_x, tag_y, tag_x + tag_w, tag_y + tag_h], radius=20, fill="black", outline="#00FF00", width=3)
+        
+        # 이름 쓰기
+        bbox_name = draw.textbbox((0, 0), name, font=font_name)
+        name_w = bbox_name[2] - bbox_name[0]
+        name_h = bbox_name[3] - bbox_name[1]
+        draw.text((tag_x + (tag_w - name_w) / 2, tag_y + (tag_h - name_h) / 2 - 10), name, font=font_name, fill="#00FF00")
 
-    /* 하단 대본 박스 스타일 */
-    .script-box {{
-        background-color: rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 20px;
-        border-left: 5px solid {bottom_text_color};
-    }}
-    .script-text {{
-        color: {bottom_text_color} !important; font-size: 1.1rem; white-space: pre-wrap; line-height: 1.6;
-    }}
-</style>
-""", unsafe_allow_html=True)
+    return canvas
 
-# ==============================================================================
-# [메인 로직] 퀴즈 생성 및 데이터 관리
-# ==============================================================================
-if generate_btn:
-    # 1. 랜덤 데이터 생성
+# --- [메인 UI] ---
+st.title("📸 쇼츠 이미지 자동 생성기")
+st.markdown("사진 URL만 넣으면 **쇼츠 규격(9:16) 이미지 파일**을 만들어줍니다!")
+
+# 1. 데이터 생성 파트
+if st.button("🎲 1. 가수 랜덤 뽑기", type="primary", use_container_width=True):
     correct_answer = random.choice(TROT_SINGERS)
     wrong_answers = random.sample([s for s in TROT_SINGERS if s != correct_answer], 3)
     options = wrong_answers + [correct_answer]
     random.shuffle(options)
-    question_initial = random.choice(QUIZ_TEMPLATES).format(name=correct_answer)
+    question = random.choice(QUIZ_TEMPLATES).format(name=correct_answer)
     
-    # 2. 세션 상태 초기화 (새로 뽑을 때마다 입력창 리셋)
-    st.session_state.update({
-        'generated': True, 'q_draft': question_initial, 'answer_real': correct_answer,
-        'opt1_draft': options[0], 'opt2_draft': options[1],
-        'opt3_draft': options[2], 'opt4_draft': options[3]
-    })
+    st.session_state['gen_data'] = {
+        'q': question,
+        'names': options,
+        'urls': ["", "", "", ""] # 초기 URL은 비어있음
+    }
 
-# ==============================================================================
-# [메인 화면] 레이아웃 구성
-# ==============================================================================
-if st.session_state.get('generated'):
-    # 1. 상단 질문 영역 (수정 가능)
-    st.markdown(f'<p class="question-header">{st.session_state["q_draft"]}</p>', unsafe_allow_html=True)
-    final_q = st.text_input("🔻 질문 멘트 수정 (안 보이면 아래 화살표 클릭)", value=st.session_state['q_draft'], key="q_edit", label_visibility="collapsed")
+# 2. 편집 파트
+if 'gen_data' in st.session_state:
+    data = st.session_state['gen_data']
+    
+    col_l, col_r = st.columns([1, 1.2])
+    
+    with col_l:
+        st.subheader("📝 내용 편집")
+        new_q = st.text_area("질문 멘트", value=data['q'], height=100)
+        
+        # 4명 가수 입력창 생성
+        new_urls = []
+        new_names = []
+        
+        for i in range(4):
+            st.markdown(f"**{i+1}번 가수: {data['names'][i]}**")
+            # 검색 버튼
+            search_url = f"https://www.google.com/search?tbm=isch&q=가수+{urllib.parse.quote(data['names'][i])}+고화질"
+            st.markdown(f"[🔍 구글에서 사진 찾기 (클릭)]({search_url})")
+            
+            # 입력창
+            input_url = st.text_input(f"{i+1}번 사진 주소 (URL) 붙여넣기", key=f"url_{i}", placeholder="이미지 우클릭 -> 이미지 주소 복사")
+            new_urls.append(input_url)
+            new_names.append(data['names'][i])
+            st.divider()
 
-    st.write("") # 간격 띄우기
-
-    # 2. 4분할 메인 영역 (2x2 그리드)
-    col1, col2 = st.columns(2)
-    with col1:
-        # 보기 1번
-        opt1_val = st.text_input("1번 이름 수정", value=st.session_state['opt1_draft'], key="opt1_edit")
-        st.markdown(f"""<div class="choice-box"><span class="singer-name">1. {opt1_val}</span><a href="https://www.google.com/search?tbm=isch&q=트로트가수+{urllib.parse.quote(opt1_val)}+고화질" target="_blank" class="photo-placeholder">📸 사진 검색하기 (클릭)<br>여기에 사진을 배치하세요</a></div>""", unsafe_allow_html=True)
-        # 보기 3번
-        opt3_val = st.text_input("3번 이름 수정", value=st.session_state['opt3_draft'], key="opt3_edit")
-        st.markdown(f"""<div class="choice-box"><span class="singer-name">3. {opt3_val}</span><a href="https://www.google.com/search?tbm=isch&q=트로트가수+{urllib.parse.quote(opt3_val)}+고화질" target="_blank" class="photo-placeholder">📸 사진 검색하기 (클릭)<br>여기에 사진을 배치하세요</a></div>""", unsafe_allow_html=True)
-
-    with col2:
-        # 보기 2번
-        opt2_val = st.text_input("2번 이름 수정", value=st.session_state['opt2_draft'], key="opt2_edit")
-        st.markdown(f"""<div class="choice-box"><span class="singer-name">2. {opt2_val}</span><a href="https://www.google.com/search?tbm=isch&q=트로트가수+{urllib.parse.quote(opt2_val)}+고화질" target="_blank" class="photo-placeholder">📸 사진 검색하기 (클릭)<br>여기에 사진을 배치하세요</a></div>""", unsafe_allow_html=True)
-        # 보기 4번
-        opt4_val = st.text_input("4번 이름 수정", value=st.session_state['opt4_draft'], key="opt4_edit")
-        st.markdown(f"""<div class="choice-box"><span class="singer-name">4. {opt4_val}</span><a href="https://www.google.com/search?tbm=isch&q=트로트가수+{urllib.parse.quote(opt4_val)}+고화질" target="_blank" class="photo-placeholder">📸 사진 검색하기 (클릭)<br>여기에 사진을 배치하세요</a></div>""", unsafe_allow_html=True)
-
-    st.divider()
-
-    # 3. 하단 대본 영역
-    st.subheader("📜 성우 대본 (색상 적용됨)")
-    current_options = [opt1_val, opt2_val, opt3_val, opt4_val]
-    real_ans = st.session_state['answer_real']
-    try:
-        ans_idx = current_options.index(real_ans) + 1
-        final_answer_text = real_ans
-    except ValueError:
-        ans_idx = "?"
-        final_answer_text = f"(원래 정답: {real_ans})"
-
-    script_content = f"""(인트로 BGM 🎵)
-성우: "{final_q}"
-성우: "3초 안에 맞춰보세요!"
-
-(효과음 ⏰ 3..2..1..)
-
-성우: "정답은 {ans_idx}번! {final_answer_text} 님입니다!"
-성우: "맞히셨다면 구독 좋아요!"
-"""
-    st.markdown(f'<div class="script-box"><pre class="script-text">{script_content}</pre></div>', unsafe_allow_html=True)
-
-else:
-    # 초기 안내 화면
-    st.info("👈 왼쪽 사이드바에서 색상을 정하고 '🎲 새 퀴즈 뽑기' 버튼을 눌러주세요!")
-    st.markdown("<h3 style='text-align: center; color: #888;'>버튼을 누르면 쇼츠 기획안이 나타납니다.</h3>", unsafe_allow_html=True)
+    with col_r:
+        st.subheader("🖼️ 결과 미리보기")
+        if st.button("✨ 이미지 생성하기 (Click)", type="primary"):
+            # 이미지 생성 로직 실행
+            with st.spinner("이미지 합성 중..."):
+                final_img = create_shorts_image(new_q, new_names, new_urls)
+                
+                # 화면에 표시
+                st.image(final_img, caption="완성된 쇼츠 이미지", use_container_width=True)
+                
+                # 다운로드 버튼 생성
+                buf = BytesIO()
+                final_img.save(buf, format="JPEG")
+                byte_im = buf.getvalue()
+                
+                st.download_button(
+                    label="💾 이미지 다운로드 (Download)",
+                    data=byte_im,
+                    file_name="trot_shorts_quiz.jpg",
+                    mime="image/jpeg",
+                    use_container_width=True
+                )
