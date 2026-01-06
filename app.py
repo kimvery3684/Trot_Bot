@@ -5,7 +5,7 @@ from io import BytesIO
 import os
 
 # --- [1. 기본 설정 및 폴더 준비] ---
-st.set_page_config(page_title="쇼츠 생성기 (대본추가)", page_icon="🎙️", layout="wide")
+st.set_page_config(page_title="쇼츠 생성기 (배치수정)", page_icon="🖼️", layout="wide")
 
 IMAGE_SAVE_DIR = "images"
 if not os.path.exists(IMAGE_SAVE_DIR):
@@ -95,17 +95,23 @@ def create_final_image(q_text, names, design):
     except:
         draw.text((50, top_y), q_text, fill=design['top_color'])
 
-    # 2. 이미지 배치
+    # 2. 이미지 배치 (핵심 수정 부분)
     img_w = design['layout_img_w']
     img_h = int(img_w * 1.1)
     start_y = design['layout_img_y']
-    gap = 40 
-    total_w = (img_w * 2) + gap
+    
+    gap_x = 40 # 가로 간격
+    gap_y = 160 # 세로 간격 (이름표 들어갈 공간 확보를 위해 넓힘)
+    
+    total_w = (img_w * 2) + gap_x
     start_x = (1080 - total_w) // 2
 
+    # 좌표 계산 (세로 간격 gap_y 적용)
     positions = [
-        (start_x, start_y), (start_x + img_w + gap, start_y), 
-        (start_x, start_y + img_h + gap), (start_x + img_w + gap, start_y + img_h + gap)
+        (start_x, start_y), 
+        (start_x + img_w + gap_x, start_y), 
+        (start_x, start_y + img_h + gap_y), 
+        (start_x + img_w + gap_x, start_y + img_h + gap_y)
     ]
     size = (img_w, img_h)
 
@@ -114,6 +120,7 @@ def create_final_image(q_text, names, design):
         if img is None:
             img = Image.new('RGB', size, (50, 50, 50))
         
+        # 이미지 리사이즈
         img_ratio = img.width / img.height
         target_ratio = size[0] / size[1]
         if img_ratio > target_ratio:
@@ -128,11 +135,15 @@ def create_final_image(q_text, names, design):
         img = img.resize(size, Image.LANCZOS)
         canvas.paste(img, pos)
 
-        # 이름표
+        # --- [이름표 위치 수정: 사진 아래로 내리기] ---
         tag_w = int(img_w * 0.9)
         tag_h = 110
+        
         tag_x = pos[0] + (size[0] - tag_w) // 2
-        tag_y = pos[1] + size[1] - (tag_h // 2)
+        # 기존: tag_y = pos[1] + size[1] - (tag_h // 2) (사진과 겹침)
+        # 변경: 사진 끝(pos[1]+size[1])에서 10픽셀 아래로
+        tag_y = pos[1] + size[1] + 10 
+        
         draw.rounded_rectangle([tag_x, tag_y, tag_x + tag_w, tag_y + tag_h], radius=20, fill=design['tag_bg'], outline=design['border'], width=5)
         
         display_name = f"{i+1}  {name}"
@@ -156,9 +167,8 @@ def create_final_image(q_text, names, design):
 
     return canvas
 
-# --- [5. 콘텐츠 생성 함수 (메타데이터 + 대본)] ---
+# --- [5. 콘텐츠 생성 함수] ---
 def generate_youtube_metadata(question, singers):
-    # 제목/설명/태그
     titles = [
         f"🔥 {question} 1위는 과연 누구일까요? #트로트",
         f"대박 반전! 😲 {question} 투표 결과는? #{singers[0]} #{singers[1]}",
@@ -187,7 +197,6 @@ def generate_youtube_metadata(question, singers):
     return title, desc, tags
 
 def generate_narration_script(question, singers):
-    # 30초 분량 쇼츠 대본
     script = f"""(오프닝 - 긴장감 있는 톤으로)
 "자, 팬 여러분 주목하세요! 오늘의 난제, {question} 과연 누구일까요?"
 
@@ -205,7 +214,7 @@ def generate_narration_script(question, singers):
     return script
 
 # --- [6. 메인 UI] ---
-st.title("🎙️ 쇼츠 생성기 (대본 추가)")
+st.title("🖼️ 쇼츠 생성기 (사진 안 가림)")
 
 if not os.path.exists(FONT_FILE):
     st.error(f"⚠️ '{FONT_FILE}' 파일이 필요합니다.")
@@ -231,13 +240,13 @@ with st.sidebar:
         n_size = st.slider("이름 크기", 40, 120, 65)
 
     with tab_layout:
-        st.info("💡 화면 배치를 조절하세요")
+        st.info("💡 사진과 이름표가 겹치지 않게 간격을 넓혔습니다.")
         layout_top_y = st.slider("상단 질문 위치 (Y)", 50, 500, 150)
         st.divider()
         layout_img_w = st.slider("사진 크기 (너비)", 300, 500, 420)
-        layout_img_y = st.slider("사진 뭉치 위치 (Y)", 200, 1000, 420)
+        layout_img_y = st.slider("사진 뭉치 위치 (Y)", 200, 1000, 400)
         st.divider()
-        layout_bot_y = st.slider("하단 문구 위치 (Y)", 1200, 1850, 1600)
+        layout_bot_y = st.slider("하단 문구 위치 (Y)", 1200, 1850, 1700)
 
     with tab_text:
         bottom_text_input = st.text_area("하단 문구 내용", "화면 두번 터치\n댓글로 정답을 남겨주세요!")
@@ -302,10 +311,8 @@ with tab_create:
     if 'result_img' in st.session_state:
         col_res1, col_res2 = st.columns([1, 1.2])
         
-        # === [유튜브 업로드용 탭 구성] ===
         with col_res1:
             st.markdown("### 🔥 유튜브 업로드 센터")
-            # 탭 분리: 메타데이터 / 대본
             tab_meta, tab_script = st.tabs(["📝 제목/설명", "🎙️ 나레이션 대본"])
             
             curr_q = st.session_state.get('last_q', '')
