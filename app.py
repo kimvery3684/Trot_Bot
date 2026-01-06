@@ -5,7 +5,7 @@ from io import BytesIO
 import os
 
 # --- [1. 기본 설정 및 폴더 준비] ---
-st.set_page_config(page_title="쇼츠 생성기 (디자인분리+보안)", page_icon="🔐", layout="wide")
+st.set_page_config(page_title="쇼츠 생성기 (유튜브SEO)", page_icon="🔥", layout="wide")
 
 IMAGE_SAVE_DIR = "images"
 if not os.path.exists(IMAGE_SAVE_DIR):
@@ -13,32 +13,27 @@ if not os.path.exists(IMAGE_SAVE_DIR):
 
 FONT_FILE = "NanumGothic-ExtraBold.ttf"
 
-# --- [2. 비밀번호 보안 기능 (추가됨)] ---
+# --- [2. 비밀번호 보안] ---
 def check_password():
-    """비밀번호 확인 함수"""
     if "password_correct" not in st.session_state:
         st.session_state.password_correct = False
-
     if st.session_state.password_correct:
         return True
-
-    st.warning("🔒 접속하려면 비밀번호가 필요합니다.")
-    password_input = st.text_input("비밀번호를 입력하세요", type="password")
-
-    # [중요] 여기에 원하는 비밀번호를 설정하세요 (기본값: 1234)
-    # Streamlit Cloud 배포 시에는 st.secrets를 사용하는 것이 좋습니다.
-    CORRECT_PASSWORD = st.secrets["APP_PASSWORD"] if "APP_PASSWORD" in st.secrets else "2378"
-
-    if password_input:
-        if password_input == CORRECT_PASSWORD:
-            st.session_state.password_correct = True
-            st.rerun()
-        else:
-            st.error("비밀번호가 틀렸습니다.")
+    
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.warning("🔒 접속하려면 비밀번호가 필요합니다.")
+        password_input = st.text_input("비밀번호", type="password")
+        CORRECT_PASSWORD = st.secrets["APP_PASSWORD"] if "APP_PASSWORD" in st.secrets else "1234"
+        if password_input:
+            if password_input == CORRECT_PASSWORD:
+                st.session_state.password_correct = True
+                st.rerun()
+            else:
+                st.error("비밀번호가 틀렸습니다.")
     return False
 
-if not check_password():
-    st.stop()
+if not check_password(): st.stop()
 
 # --- [3. 데이터 설정] ---
 TROT_SINGERS_TOP50 = [
@@ -87,12 +82,11 @@ def create_final_image(q_text, names, design):
     canvas = Image.new('RGB', (1080, 1920), design['bg'])
     draw = ImageDraw.Draw(canvas)
     
-    # 폰트 로드 (상단용, 이름용, 하단용 각각 크기 적용)
     font_title = get_font(design['top_size'])
     font_name = get_font(design['n_size'])
     font_bottom = get_font(design['bot_size'])
     
-    # 1. 상단 질문 그리기 (상단 전용 색상 적용)
+    # 1. 상단 질문
     top_y = design['layout_top_y']
     try:
         bbox = draw.textbbox((0, 0), q_text, font=font_title)
@@ -106,15 +100,12 @@ def create_final_image(q_text, names, design):
     img_h = int(img_w * 1.1)
     start_y = design['layout_img_y']
     gap = 40 
-    
     total_w = (img_w * 2) + gap
     start_x = (1080 - total_w) // 2
 
     positions = [
-        (start_x, start_y), 
-        (start_x + img_w + gap, start_y), 
-        (start_x, start_y + img_h + gap), 
-        (start_x + img_w + gap, start_y + img_h + gap)
+        (start_x, start_y), (start_x + img_w + gap, start_y), 
+        (start_x, start_y + img_h + gap), (start_x + img_w + gap, start_y + img_h + gap)
     ]
     size = (img_w, img_h)
 
@@ -123,7 +114,6 @@ def create_final_image(q_text, names, design):
         if img is None:
             img = Image.new('RGB', size, (50, 50, 50))
         
-        # 이미지 리사이즈
         img_ratio = img.width / img.height
         target_ratio = size[0] / size[1]
         if img_ratio > target_ratio:
@@ -143,10 +133,8 @@ def create_final_image(q_text, names, design):
         tag_h = 110
         tag_x = pos[0] + (size[0] - tag_w) // 2
         tag_y = pos[1] + size[1] - (tag_h // 2)
-        
         draw.rounded_rectangle([tag_x, tag_y, tag_x + tag_w, tag_y + tag_h], radius=20, fill=design['tag_bg'], outline=design['border'], width=5)
         
-        # 이름 그리기 (번호 포함)
         display_name = f"{i+1}  {name}"
         try:
             bbox_name = draw.textbbox((0, 0), display_name, font=font_name)
@@ -156,22 +144,55 @@ def create_final_image(q_text, names, design):
         except: 
             draw.text((tag_x+20, tag_y+30), display_name, fill=design['n_color'])
 
-    # 3. 하단 문구 그리기 (하단 전용 색상 적용)
+    # 3. 하단 문구
     bottom_text = design.get('bottom_text', '')
     bot_y = design['layout_bot_y']
-    
     if bottom_text:
         try:
             bbox_b = draw.textbbox((0, 0), bottom_text, font=font_bottom)
             text_bw = bbox_b[2] - bbox_b[0]
-            # 하단 전용 색상(bot_color) 사용
             draw.text(((1080 - text_bw) / 2, bot_y), bottom_text, font=font_bottom, fill=design['bot_color'], align="center")
         except: pass
 
     return canvas
 
-# --- [5. 메인 UI] ---
-st.title("🔢 쇼츠 생성기 (디자인 분리판)")
+# --- [5. 유튜브 SEO 생성 함수] ---
+def generate_youtube_metadata(question, singers):
+    # 1. 강력한 어그로성 제목 생성 (랜덤)
+    titles = [
+        f"🔥 {question} 1위는 과연 누구일까요? #트로트",
+        f"대박 반전! 😲 {question} 투표 결과는? #{singers[0]} #{singers[1]}",
+        f"당신의 선택은? 👉 {question} (솔직히 이분이죠)",
+        f"🏆 트로트 팬들이 뽑은 {question} 레전드 결과",
+        f"※충격주의※ {question} 1위가 이분이라고?! ㄷㄷ"
+    ]
+    title = random.choice(titles)
+
+    # 2. 설명란 (참여 유도형)
+    desc = f"""{question}
+
+👇 여러분의 생각을 댓글로 남겨주세요! 👇
+(화면을 두 번 터치하면 투표가 완료됩니다 💖)
+
+1️⃣ {singers[0]}
+2️⃣ {singers[1]}
+3️⃣ {singers[2]}
+4️⃣ {singers[3]}
+
+🔥 매일 재밌는 트로트 투표가 올라옵니다! '구독'과 '좋아요' 부탁드려요!
+
+#트로트 #트로트가수 #인기투표 #임영웅 #이찬원 #김호중 #박지현 #{singers[0]} #{singers[1]}
+"""
+
+    # 3. 태그 (검색량 높은 키워드 조합)
+    base_tags = "트로트, 트로트가수, 미스터트롯, 현역가왕, 미스트롯, 인기투표, shorts, 쇼츠, 랭킹"
+    singer_tags = ", ".join(singers)
+    tags = f"{base_tags}, {singer_tags}, {question.replace(' ','')}"
+
+    return title, desc, tags
+
+# --- [6. 메인 UI] ---
+st.title("🔥 쇼츠 생성기 (유튜브 알고리즘 Ver)")
 
 if not os.path.exists(FONT_FILE):
     st.error(f"⚠️ '{FONT_FILE}' 파일이 필요합니다.")
@@ -179,22 +200,17 @@ if not os.path.exists(FONT_FILE):
 # 디자인 설정 (사이드바)
 with st.sidebar:
     st.header("🎨 디자인 & 레이아웃")
-    
-    # 탭 1: 색상 설정 (상단/하단 분리)
     tab_color, tab_layout, tab_text = st.tabs(["색상/크기", "위치/배치", "문구"])
     
     with tab_color:
         st.subheader("🖍️ 색상 설정")
         bg_color = st.color_picker("배경색", "#000000")
-        top_color = st.color_picker("⬆️ 상단 질문 색", "#FFFF00") # 상단 전용
-        bot_color = st.color_picker("⬇️ 하단 문구 색", "#FFFFFF") # 하단 전용
-        
+        top_color = st.color_picker("⬆️ 상단 질문 색", "#FFFF00")
+        bot_color = st.color_picker("⬇️ 하단 문구 색", "#FFFFFF")
         st.divider()
-        st.caption("이름표 설정")
         tag_bg = st.color_picker("이름표 배경", "#000000")
         border = st.color_picker("테두리 색", "#00FF00")
         n_color = st.color_picker("이름 색", "#00FF00")
-        
         st.divider()
         st.subheader("📏 크기 설정")
         top_size = st.slider("⬆️ 상단 질문 크기", 50, 150, 90)
@@ -213,13 +229,10 @@ with st.sidebar:
     with tab_text:
         bottom_text_input = st.text_area("하단 문구 내용", "화면 두번 터치\n댓글로 정답을 남겨주세요!")
     
-    # 디자인 딕셔너리에 분리된 변수 저장
     design = {
-        'bg': bg_color, 
-        'top_color': top_color, 'top_size': top_size, # 상단 전용
-        'bot_color': bot_color, 'bot_size': bot_size, # 하단 전용
-        'tag_bg': tag_bg, 'border': border, 'n_color': n_color, 'n_size': n_size,
-        'bottom_text': bottom_text_input,
+        'bg': bg_color, 'top_color': top_color, 'top_size': top_size, 
+        'bot_color': bot_color, 'bot_size': bot_size, 'tag_bg': tag_bg, 'border': border, 
+        'n_color': n_color, 'n_size': n_size, 'bottom_text': bottom_text_input,
         'layout_top_y': layout_top_y, 'layout_img_w': layout_img_w, 
         'layout_img_y': layout_img_y, 'layout_bot_y': layout_bot_y
     }
@@ -275,9 +288,27 @@ with tab_create:
 
     if 'result_img' in st.session_state:
         col_res1, col_res2 = st.columns([1, 1.2])
+        
+        # === [여기가 핵심: 유튜브 SEO 메타데이터 생성 구역] ===
         with col_res1:
-            st.info("Tip: 왼쪽 사이드바에서 상/하단 색상과 크기를 따로 조절해보세요!")
-            new_q_val = st.text_area("상단 질문 멘트 수정", value=st.session_state.get('last_q', ''))
+            st.markdown("### 🔥 유튜브 업로드용 (복사/붙여넣기)")
+            st.caption("알고리즘이 좋아하는 제목과 태그를 자동으로 생성했습니다.")
+            
+            # 현재 질문과 가수 명단을 가져옴
+            curr_q = st.session_state.get('last_q', '')
+            curr_opts = st.session_state.get('current_options', [])
+            
+            if curr_q and curr_opts:
+                meta_title, meta_desc, meta_tags = generate_youtube_metadata(curr_q, curr_opts)
+                
+                st.text_input("📌 제목 (Title)", value=meta_title)
+                st.text_area("📝 설명 (Description)", value=meta_desc, height=200)
+                st.text_area("🏷️ 태그 (Tags)", value=meta_tags, height=100)
+            else:
+                st.info("퀴즈 이미지를 먼저 생성해주세요.")
+
+            st.divider()
+            new_q_val = st.text_area("이미지 상단 질문 수정", value=curr_q)
             
         with col_res2:
             if st.button("✨ 디자인/멘트 수정사항 반영", type="primary", use_container_width=True):
