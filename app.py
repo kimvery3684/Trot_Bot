@@ -5,7 +5,7 @@ from io import BytesIO
 import os
 
 # --- [1. 기본 설정 및 폴더 준비] ---
-st.set_page_config(page_title="쇼츠 생성기 (번호추가)", page_icon="🔢", layout="wide")
+st.set_page_config(page_title="쇼츠 생성기 (디자인분리+보안)", page_icon="🔐", layout="wide")
 
 IMAGE_SAVE_DIR = "images"
 if not os.path.exists(IMAGE_SAVE_DIR):
@@ -13,7 +13,34 @@ if not os.path.exists(IMAGE_SAVE_DIR):
 
 FONT_FILE = "NanumGothic-ExtraBold.ttf"
 
-# --- [2. 데이터 설정] ---
+# --- [2. 비밀번호 보안 기능 (추가됨)] ---
+def check_password():
+    """비밀번호 확인 함수"""
+    if "password_correct" not in st.session_state:
+        st.session_state.password_correct = False
+
+    if st.session_state.password_correct:
+        return True
+
+    st.warning("🔒 접속하려면 비밀번호가 필요합니다.")
+    password_input = st.text_input("비밀번호를 입력하세요", type="password")
+
+    # [중요] 여기에 원하는 비밀번호를 설정하세요 (기본값: 1234)
+    # Streamlit Cloud 배포 시에는 st.secrets를 사용하는 것이 좋습니다.
+    CORRECT_PASSWORD = st.secrets["APP_PASSWORD"] if "APP_PASSWORD" in st.secrets else "2378"
+
+    if password_input:
+        if password_input == CORRECT_PASSWORD:
+            st.session_state.password_correct = True
+            st.rerun()
+        else:
+            st.error("비밀번호가 틀렸습니다.")
+    return False
+
+if not check_password():
+    st.stop()
+
+# --- [3. 데이터 설정] ---
 TROT_SINGERS_TOP50 = [
     "임영웅", "이찬원", "박지현", "영탁", "김호중", "정동원", "장민호", "박서진", "안성훈", "손태진",
     "진해성", "최수호", "송가인", "전유진", "양지은", "김다현", "김태연", "홍지윤", "황영웅", "진욱",
@@ -29,7 +56,7 @@ QUIZ_TOPICS = [
     "가장 청순한 첫사랑 재질 1위?", "지금 이 순간 가장 빛나는 별!", "영원한 우리의 오빠/언니!"
 ]
 
-# --- [3. 핵심 기능 함수] ---
+# --- [4. 핵심 기능 함수] ---
 
 def save_image_to_disk(singer_name, uploaded_file):
     try:
@@ -60,18 +87,19 @@ def create_final_image(q_text, names, design):
     canvas = Image.new('RGB', (1080, 1920), design['bg'])
     draw = ImageDraw.Draw(canvas)
     
-    font_title = get_font(design['t_size'])
+    # 폰트 로드 (상단용, 이름용, 하단용 각각 크기 적용)
+    font_title = get_font(design['top_size'])
     font_name = get_font(design['n_size'])
-    font_bottom = get_font(design['b_size'])
+    font_bottom = get_font(design['bot_size'])
     
-    # 1. 상단 질문 그리기
+    # 1. 상단 질문 그리기 (상단 전용 색상 적용)
     top_y = design['layout_top_y']
     try:
         bbox = draw.textbbox((0, 0), q_text, font=font_title)
         text_w = bbox[2] - bbox[0]
-        draw.text(((1080 - text_w) / 2, top_y), q_text, font=font_title, fill=design['t_color'], align="center")
+        draw.text(((1080 - text_w) / 2, top_y), q_text, font=font_title, fill=design['top_color'], align="center")
     except:
-        draw.text((50, top_y), q_text, fill=design['t_color'])
+        draw.text((50, top_y), q_text, fill=design['top_color'])
 
     # 2. 이미지 배치
     img_w = design['layout_img_w']
@@ -95,6 +123,7 @@ def create_final_image(q_text, names, design):
         if img is None:
             img = Image.new('RGB', size, (50, 50, 50))
         
+        # 이미지 리사이즈
         img_ratio = img.width / img.height
         target_ratio = size[0] / size[1]
         if img_ratio > target_ratio:
@@ -117,9 +146,8 @@ def create_final_image(q_text, names, design):
         
         draw.rounded_rectangle([tag_x, tag_y, tag_x + tag_w, tag_y + tag_h], radius=20, fill=design['tag_bg'], outline=design['border'], width=5)
         
-        # --- [수정된 부분: 이름 앞에 번호 붙이기] ---
-        display_name = f"{i+1}  {name}" # 1  가수이름 (숫자와 이름 사이 띄어쓰기 2칸)
-        
+        # 이름 그리기 (번호 포함)
+        display_name = f"{i+1}  {name}"
         try:
             bbox_name = draw.textbbox((0, 0), display_name, font=font_name)
             name_w = bbox_name[2] - bbox_name[0]
@@ -128,7 +156,7 @@ def create_final_image(q_text, names, design):
         except: 
             draw.text((tag_x+20, tag_y+30), display_name, fill=design['n_color'])
 
-    # 3. 하단 문구 그리기
+    # 3. 하단 문구 그리기 (하단 전용 색상 적용)
     bottom_text = design.get('bottom_text', '')
     bot_y = design['layout_bot_y']
     
@@ -136,13 +164,14 @@ def create_final_image(q_text, names, design):
         try:
             bbox_b = draw.textbbox((0, 0), bottom_text, font=font_bottom)
             text_bw = bbox_b[2] - bbox_b[0]
-            draw.text(((1080 - text_bw) / 2, bot_y), bottom_text, font=font_bottom, fill=design['t_color'], align="center")
+            # 하단 전용 색상(bot_color) 사용
+            draw.text(((1080 - text_bw) / 2, bot_y), bottom_text, font=font_bottom, fill=design['bot_color'], align="center")
         except: pass
 
     return canvas
 
-# --- [4. 메인 UI] ---
-st.title("🔢 쇼츠 생성기 (번호 추가됨)")
+# --- [5. 메인 UI] ---
+st.title("🔢 쇼츠 생성기 (디자인 분리판)")
 
 if not os.path.exists(FONT_FILE):
     st.error(f"⚠️ '{FONT_FILE}' 파일이 필요합니다.")
@@ -151,24 +180,29 @@ if not os.path.exists(FONT_FILE):
 with st.sidebar:
     st.header("🎨 디자인 & 레이아웃")
     
+    # 탭 1: 색상 설정 (상단/하단 분리)
     tab_color, tab_layout, tab_text = st.tabs(["색상/크기", "위치/배치", "문구"])
     
     with tab_color:
-        st.caption("색상 설정")
+        st.subheader("🖍️ 색상 설정")
         bg_color = st.color_picker("배경색", "#000000")
-        t_color = st.color_picker("질문/하단 색", "#FFFF00")
+        top_color = st.color_picker("⬆️ 상단 질문 색", "#FFFF00") # 상단 전용
+        bot_color = st.color_picker("⬇️ 하단 문구 색", "#FFFFFF") # 하단 전용
+        
+        st.divider()
+        st.caption("이름표 설정")
         tag_bg = st.color_picker("이름표 배경", "#000000")
         border = st.color_picker("테두리 색", "#00FF00")
         n_color = st.color_picker("이름 색", "#00FF00")
         
         st.divider()
-        st.caption("글자 크기")
-        t_size = st.slider("상단 질문 크기", 50, 150, 90)
+        st.subheader("📏 크기 설정")
+        top_size = st.slider("⬆️ 상단 질문 크기", 50, 150, 90)
+        bot_size = st.slider("⬇️ 하단 문구 크기", 30, 120, 70)
         n_size = st.slider("이름 크기", 40, 120, 65)
-        b_size = st.slider("하단 문구 크기", 30, 120, 70)
 
     with tab_layout:
-        st.info("💡 여기서 화면 구성을 조절하세요")
+        st.info("💡 화면 배치를 조절하세요")
         layout_top_y = st.slider("상단 질문 위치 (Y)", 50, 500, 150)
         st.divider()
         layout_img_w = st.slider("사진 크기 (너비)", 300, 500, 420)
@@ -179,11 +213,15 @@ with st.sidebar:
     with tab_text:
         bottom_text_input = st.text_area("하단 문구 내용", "화면 두번 터치\n댓글로 정답을 남겨주세요!")
     
+    # 디자인 딕셔너리에 분리된 변수 저장
     design = {
-        'bg': bg_color, 't_color': t_color, 'tag_bg': tag_bg, 'border': border, 'n_color': n_color,
-        't_size': t_size, 'n_size': n_size, 'b_size': b_size,
+        'bg': bg_color, 
+        'top_color': top_color, 'top_size': top_size, # 상단 전용
+        'bot_color': bot_color, 'bot_size': bot_size, # 하단 전용
+        'tag_bg': tag_bg, 'border': border, 'n_color': n_color, 'n_size': n_size,
         'bottom_text': bottom_text_input,
-        'layout_top_y': layout_top_y, 'layout_img_w': layout_img_w, 'layout_img_y': layout_img_y, 'layout_bot_y': layout_bot_y
+        'layout_top_y': layout_top_y, 'layout_img_w': layout_img_w, 
+        'layout_img_y': layout_img_y, 'layout_bot_y': layout_bot_y
     }
 
 # 탭 구성
@@ -238,11 +276,11 @@ with tab_create:
     if 'result_img' in st.session_state:
         col_res1, col_res2 = st.columns([1, 1.2])
         with col_res1:
-            st.info("Tip: 왼쪽 [위치/배치] 탭에서 사진 크기와 위치를 조절하세요.")
+            st.info("Tip: 왼쪽 사이드바에서 상/하단 색상과 크기를 따로 조절해보세요!")
             new_q_val = st.text_area("상단 질문 멘트 수정", value=st.session_state.get('last_q', ''))
             
         with col_res2:
-            if st.button("✨ 수정사항 반영 (위치/크기/멘트)", type="primary", use_container_width=True):
+            if st.button("✨ 디자인/멘트 수정사항 반영", type="primary", use_container_width=True):
                 if 'current_options' in st.session_state:
                     st.session_state['result_img'] = create_final_image(new_q_val, st.session_state['current_options'], design)
                     st.session_state['last_q'] = new_q_val
