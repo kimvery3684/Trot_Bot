@@ -9,7 +9,7 @@ import urllib.parse
 import os
 
 # --- [1. 기본 설정 및 저장소 준비] ---
-st.set_page_config(page_title="쇼츠 생성기 (글자조절+네이버)", page_icon="🎚️", layout="wide")
+st.set_page_config(page_title="쇼츠 생성기 (4명선택+글자조절)", page_icon="🎚️", layout="wide")
 
 IMAGE_SAVE_DIR = "singer_images"
 if not os.path.exists(IMAGE_SAVE_DIR):
@@ -85,14 +85,12 @@ def search_naver_profile_image(singer_name):
     except: pass
     return None
 
-# --- [강력해진 폰트 로드 함수] ---
 @st.cache_resource
 def load_fonts():
-    # 1순위: 구글 폰트, 2순위: 백업 서버
     urls = [
         "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-ExtraBold.ttf",
         "https://raw.githubusercontent.com/google/fonts/main/ofl/nanumgothic/NanumGothic-Bold.ttf",
-        "https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_one@1.0/NanumGothic.woff" # 백업
+        "https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_one@1.0/NanumGothic.woff"
     ]
     for url in urls:
         try:
@@ -102,7 +100,6 @@ def load_fonts():
     return None
 
 def create_shorts_image(q_text, names, image_pil_list, design_settings):
-    """최종 합성 (글자 크기 반영)"""
     canvas = Image.new('RGB', (1080, 1920), design_settings['bg_color'])
     draw = ImageDraw.Draw(canvas)
     
@@ -112,17 +109,15 @@ def create_shorts_image(q_text, names, image_pil_list, design_settings):
 
     if font_bytes:
         try:
-            # 사용자가 설정한 크기 적용
             font_title = ImageFont.truetype(font_bytes, design_settings['title_size'])
             font_bytes.seek(0)
             font_name = ImageFont.truetype(font_bytes, design_settings['name_size'])
         except: pass
 
-    if font_title is None: # 폰트 로드 실패 시 비상용
+    if font_title is None:
         font_title = ImageFont.load_default()
         font_name = ImageFont.load_default()
 
-    # 제목
     try:
         bbox = draw.textbbox((0, 0), q_text, font=font_title)
         text_w = bbox[2] - bbox[0]
@@ -135,7 +130,6 @@ def create_shorts_image(q_text, names, image_pil_list, design_settings):
 
     for i, (name, img, pos) in enumerate(zip(names, image_pil_list, positions)):
         if img:
-            # 원본 리사이즈
             img_ratio = img.width / img.height
             target_ratio = size[0] / size[1]
             if img_ratio > target_ratio:
@@ -152,7 +146,6 @@ def create_shorts_image(q_text, names, image_pil_list, design_settings):
 
         canvas.paste(img, pos)
         
-        # 이름표
         tag_w, tag_h = 400, 120
         tag_x = pos[0] + (size[0] - tag_w) // 2
         tag_y = pos[1] + size[1] - (tag_h // 2)
@@ -169,15 +162,11 @@ def create_shorts_image(q_text, names, image_pil_list, design_settings):
     return canvas
 
 # --- [5. 메인 UI] ---
-st.title("🎚️ 쇼츠 생성기 (글자조절 + 네이버)")
-st.caption("왼쪽 사이드바에서 글자 크기와 색상을 자유롭게 조절하세요.")
+st.title("🎚️ 쇼츠 생성기 (4명선택 + 네이버)")
+st.caption("가수를 최대 4명까지 직접 선택하여 퀴즈를 만들 수 있습니다.")
 
-# === [사이드바: 디자인 설정 (크기 조절 추가)] ===
 with st.sidebar:
     st.header("🎨 디자인 설정")
-    st.caption("색상과 크기를 조절해보세요.")
-    
-    # 색상 설정 (기존 유지)
     bg_color = st.color_picker("배경색", "#000000")
     title_color = st.color_picker("질문 색", "#FFFF00")
     tag_bg_color = st.color_picker("이름표 배경", "#000000")
@@ -185,33 +174,61 @@ with st.sidebar:
     name_color = st.color_picker("이름 색", "#00FF00")
     
     st.divider()
-    
-    # 글자 크기 설정 (새로 추가!)
-    title_size = st.slider("질문 글자 크기", min_value=50, max_value=150, value=100, step=5)
-    name_size = st.slider("이름 글자 크기", min_value=40, max_value=100, value=70, step=5)
+    title_size = st.slider("질문 글자 크기", 50, 150, 100, 5)
+    name_size = st.slider("이름 글자 크기", 40, 100, 70, 5)
 
     design_settings = {
         'bg_color': bg_color, 'title_color': title_color,
         'tag_bg_color': tag_bg_color, 'border_color': border_color, 'name_color': name_color,
-        'title_size': title_size, 'name_size': name_size # 크기 정보 추가
+        'title_size': title_size, 'name_size': name_size
     }
 
-tab_s, tab_t = st.tabs(["👤 인물 선택 (Top 50)", "📝 주제 선택"])
+tab_s, tab_t = st.tabs(["👤 인물 선택", "📝 주제 선택"])
+
 with tab_s:
-    s_mode = st.radio("방식", ["랜덤", "직접"], horizontal=True)
-    sel_singer = st.selectbox("가수 선택", TROT_SINGERS_TOP50) if s_mode == "직접" else None
+    s_mode = st.radio("방식", ["랜덤", "직접 (최대 4명)"], horizontal=True)
+    selected_singers = []
+    
+    if s_mode == "직접 (최대 4명)":
+        # 멀티 셀렉트 박스 (최대 4명 제한은 안내 문구로, 로직에서 처리)
+        selected_singers = st.multiselect("가수 선택 (4명을 채우면 그 멤버로 구성됩니다)", TROT_SINGERS_TOP50, max_selections=4)
+        if len(selected_singers) < 4 and len(selected_singers) > 0:
+            st.info(f"💡 {len(selected_singers)}명을 선택하셨습니다. 나머지 {4-len(selected_singers)}명은 랜덤으로 채워집니다.")
+    
 with tab_t:
     t_mode = st.radio("방식 ", ["랜덤", "직접"], horizontal=True)
     sel_topic = st.selectbox("주제 선택", QUIZ_TOPICS) if t_mode == "직접" else None
 
-if st.button("🚀 퀴즈 생성하기 (저장된 사진 우선 확인)", type="primary", use_container_width=True):
-    with st.spinner("💾 저장소 확인 및 네이버 검색 중..."):
-        correct = sel_singer if s_mode == "직접" else random.choice(TROT_SINGERS_TOP50)
-        wrongs = random.sample([s for s in TROT_SINGERS_TOP50 if s != correct], 3)
-        options = wrongs + [correct]
-        random.shuffle(options)
-        question = (sel_topic if t_mode == "직접" else random.choice(QUIZ_TOPICS)).format(name=correct)
+if st.button("🚀 퀴즈 생성하기", type="primary", use_container_width=True):
+    with st.spinner("💾 멤버 구성 및 이미지 확인 중..."):
         
+        # 1. 멤버 구성 로직
+        if s_mode == "직접 (최대 4명)":
+            if not selected_singers:
+                st.error("가수를 최소 1명 이상 선택해주세요.")
+                st.stop()
+            
+            options = selected_singers[:]
+            # 4명이 안 되면 나머지 랜덤 채우기
+            if len(options) < 4:
+                remaining_pool = [s for s in TROT_SINGERS_TOP50 if s not in options]
+                options.extend(random.sample(remaining_pool, 4 - len(options)))
+        else:
+            # 완전 랜덤
+            correct = random.choice(TROT_SINGERS_TOP50)
+            wrongs = random.sample([s for s in TROT_SINGERS_TOP50 if s != correct], 3)
+            options = wrongs + [correct]
+        
+        # 순서 섞기
+        random.shuffle(options)
+        
+        # 2. 정답(주인공) 선정 - 구성된 멤버 중 한 명을 랜덤으로 지정
+        correct_answer = random.choice(options)
+        
+        # 3. 질문 생성
+        question = (sel_topic if t_mode == "직접" else random.choice(QUIZ_TOPICS)).format(name=correct_answer)
+        
+        # 4. 이미지 검색 (로컬 -> 네이버)
         search_results = []
         for s in options:
             if load_image_local(s): search_results.append("LOCAL_FOUND")
@@ -260,7 +277,6 @@ if 'auto_data' in st.session_state:
 
     with col_r:
         st.subheader("📸 최종 결과물")
-        # 버튼 클릭 시 리렌더링 (크기/색상 변경 즉시 반영)
         if st.button("✨ 다시 그리기 (설정 적용)"): pass
         
         result_img = create_shorts_image(new_q, data['names'], final_pils, design_settings)
@@ -268,4 +284,4 @@ if 'auto_data' in st.session_state:
         
         buf = BytesIO()
         result_img.save(buf, format="JPEG", quality=100)
-        st.download_button("💾 다운로드", buf.getvalue(), file_name="shorts_final_adjustable.jpg", mime="image/jpeg", type="primary", use_container_width=True)
+        st.download_button("💾 다운로드", buf.getvalue(), file_name="shorts_final_multi.jpg", mime="image/jpeg", type="primary", use_container_width=True)
