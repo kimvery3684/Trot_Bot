@@ -7,9 +7,17 @@ import cv2
 import numpy as np
 from duckduckgo_search import DDGS
 import urllib.parse
+import os
 
-# --- [1. 기본 설정] ---
-st.set_page_config(page_title="쇼츠 자동 생성기 (매운맛 Ver)", page_icon="🔥", layout="wide")
+# --- [1. 기본 설정 & 폴더 생성] ---
+st.set_page_config(page_title="쇼츠 자동 생성기 (자동저장 Ver)", page_icon="💾", layout="wide")
+
+# 이미지를 저장할 로컬 폴더 이름
+IMAGE_SAVE_DIR = "singer_images"
+
+# 폴더가 없으면 자동으로 생성
+if not os.path.exists(IMAGE_SAVE_DIR):
+    os.makedirs(IMAGE_SAVE_DIR)
 
 # --- [2. 비밀번호 보안] ---
 def check_password():
@@ -42,7 +50,6 @@ TROT_SINGERS = [
     "조용필","최백호","윤항기","김국환","편승엽","오승근","이자연","김용임","서지오","김혜림"
 ]
 
-# 🔥 트래픽 폭발 & 자극적인 주제 100개
 QUIZ_TOPICS = [
     "행사비 가장 비쌀 것 같은 가수는?", "재산 1000억 넘을 것 같은 관상은?", "실물 보고 기절초풍한 가수는?", 
     "성형외과 의사가 뽑은 완벽한 얼굴?", "시어머니 프리패스상 1위는?", "며느리 삼고 싶은 1위는?",
@@ -79,31 +86,77 @@ QUIZ_TOPICS = [
     "무인도에 떨어져도 살아남을 생존력?", "팬이랑 결혼할 수도 있을 로맨티스트?"
 ]
 
-# --- [4. 핵심 기능 함수] ---
+# --- [4. 핵심 기능: 로컬 저장소 및 검색] ---
+
+def save_image_local(singer_name, uploaded_file):
+    """업로드된 파일을 로컬 폴더에 저장"""
+    try:
+        # 파일 확장자 확인 (기본 jpg)
+        file_path = os.path.join(IMAGE_SAVE_DIR, f"{singer_name}.jpg")
+        with open(file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        return True
+    except:
+        return False
+
+def load_image_local(singer_name):
+    """로컬 폴더에서 이미지 불러오기"""
+    # jpg, png, jpeg 순서로 확인
+    for ext in ['jpg', 'png', 'jpeg']:
+        file_path = os.path.join(IMAGE_SAVE_DIR, f"{singer_name}.{ext}")
+        if os.path.exists(file_path):
+            try:
+                return Image.open(file_path).convert("RGB")
+            except: pass
+    return None
 
 def fetch_image_secure(url):
     """봇 차단 우회하여 이미지 다운로드"""
     if not url or not url.startswith("http"): return None
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/110.0.0.0 Safari/537.36"}
     try:
-        response = requests.get(url, headers=headers, timeout=5)
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         return Image.open(BytesIO(response.content)).convert("RGB")
     except Exception: return None
 
-def search_image_auto(query):
-    """이미지 검색 시도"""
+def search_image_naver(query, client_id, client_secret):
+    """네이버 API 검색"""
+    url = "https://openapi.naver.com/v1/search/image"
+    headers = {"X-Naver-Client-Id": client_id, "X-Naver-Client-Secret": client_secret}
+    params = {"query": f"{query} 고화질 프로필", "display": 1, "start": 1, "sort": "sim", "filter": "medium"}
+    try:
+        res = requests.get(url, headers=headers, params=params, timeout=5)
+        if res.status_code == 200:
+            items = res.json().get('items', [])
+            if items: return items[0]['link']
+    except: pass
+    return None
+
+def search_image_hybrid(query, naver_keys):
+    """1순위: 로컬 저장소 -> 2순위: 네이버 -> 3순위: 덕덕고"""
+    
+    # 1. 로컬 저장소 확인 (가장 빠름)
+    local_img = load_image_local(query)
+    if local_img: return "LOCAL_FOUND"
+
+    # 2. 네이버 API
+    if naver_keys['id'] and naver_keys['secret']:
+        img_url = search_image_naver(query, naver_keys['id'], naver_keys['secret'])
+        if img_url: return img_url
+    
+    # 3. 덕덕고
     search_terms = [f"{query} wiki image", f"{query} singer", f"{query} 트로트"]
     try:
         with DDGS() as ddgs:
             for term in search_terms:
                 results = list(ddgs.images(term, max_results=1))
                 if results: return results[0]['image']
-    except Exception: pass
+    except: pass
     return None
 
 def convert_to_sketch(pil_image):
-    """스케치 필터 강제 적용"""
+    """스케치 필터"""
     try:
         img_np = np.array(pil_image)
         if len(img_np.shape) == 2: gray = img_np
@@ -117,42 +170,60 @@ def convert_to_sketch(pil_image):
 
 @st.cache_resource
 def load_fonts():
-    font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-ExtraBold.ttf"
-    try:
-        response = requests.get(font_url, timeout=10)
-        return BytesIO(response.content)
-    except: return None
+    """폰트 로드"""
+    urls = [
+        "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-ExtraBold.ttf",
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/nanumgothic/NanumGothic-Bold.ttf"
+    ]
+    for url in urls:
+        try:
+            response = requests.get(url, timeout=15)
+            if response.status_code == 200: return BytesIO(response.content)
+        except: continue
+    return None
 
-# --- [이미지 생성 함수 (디자인 설정 적용)] ---
-def create_shorts_image(q_text, names, image_sources, design_settings):
-    # 배경색 적용
+def create_shorts_image(q_text, names, final_images, design_settings):
+    """최종 이미지 합성"""
     canvas = Image.new('RGB', (1080, 1920), design_settings['bg_color'])
     draw = ImageDraw.Draw(canvas)
     
     font_bytes = load_fonts()
-    try:
-        if font_bytes:
+    font_title = None
+    font_name = None
+
+    if font_bytes:
+        try:
             font_title = ImageFont.truetype(font_bytes, 100)
             font_bytes.seek(0)
             font_name = ImageFont.truetype(font_bytes, 70)
-        else: raise Exception
-    except:
+        except: pass
+
+    if font_title is None:
+        sys_fonts = ["malgun.ttf", "NanumGothic.ttf", "arial.ttf", "AppleGothic.ttf"]
+        for f in sys_fonts:
+            try:
+                font_title = ImageFont.truetype(f, 100)
+                font_name = ImageFont.truetype(f, 70)
+                break
+            except: continue
+
+    if font_title is None:
         font_title = ImageFont.load_default()
         font_name = ImageFont.load_default()
 
-    # 질문 (제목) 색상 적용
-    bbox = draw.textbbox((0, 0), q_text, font=font_title)
-    text_w = bbox[2] - bbox[0]
-    draw.text(((1080 - text_w) / 2, 150), q_text, font=font_title, fill=design_settings['title_color'], align="center")
+    # 질문
+    try:
+        bbox = draw.textbbox((0, 0), q_text, font=font_title)
+        text_w = bbox[2] - bbox[0]
+        draw.text(((1080 - text_w) / 2, 150), q_text, font=font_title, fill=design_settings['title_color'], align="center")
+    except:
+        draw.text((100, 150), q_text, fill=design_settings['title_color'])
 
     positions = [(50, 500), (560, 500), (50, 1100), (560, 1100)]
     size = (470, 550)
 
-    for i, (name, source, pos) in enumerate(zip(names, image_sources, positions)):
-        img = None
-        if isinstance(source, BytesIO): img = Image.open(source).convert("RGB")
-        elif isinstance(source, str): img = fetch_image_secure(source)
-        
+    for i, (name, img, pos) in enumerate(zip(names, final_images, positions)):
+        # 이미지 처리 (이미 PIL 객체로 넘어옴)
         if img:
             img = convert_to_sketch(img)
             img_ratio = img.width / img.height
@@ -173,7 +244,7 @@ def create_shorts_image(q_text, names, image_sources, design_settings):
 
         canvas.paste(img, pos)
         
-        # 이름표 디자인 적용
+        # 이름표
         tag_w, tag_h = 300, 120
         tag_x = pos[0] + (size[0] - tag_w) // 2
         tag_y = pos[1] + size[1] - (tag_h // 2)
@@ -186,113 +257,135 @@ def create_shorts_image(q_text, names, image_sources, design_settings):
             width=3
         )
         
-        bbox_name = draw.textbbox((0, 0), name, font=font_name)
-        name_w = bbox_name[2] - bbox_name[0]
-        name_h = bbox_name[3] - bbox_name[1]
-        draw.text(
-            (tag_x + (tag_w - name_w) / 2, tag_y + (tag_h - name_h) / 2 - 10), 
-            name, 
-            font=font_name, 
-            fill=design_settings['name_color']
-        )
+        try:
+            bbox_name = draw.textbbox((0, 0), name, font=font_name)
+            name_w = bbox_name[2] - bbox_name[0]
+            name_h = bbox_name[3] - bbox_name[1]
+            draw.text(
+                (tag_x + (tag_w - name_w) / 2, tag_y + (tag_h - name_h) / 2 - 10), 
+                name, 
+                font=font_name, 
+                fill=design_settings['name_color']
+            )
+        except:
+             draw.text((tag_x + 50, tag_y + 30), name, font=font_name, fill=design_settings['name_color'])
 
     return canvas
 
 # --- [5. 메인 UI] ---
-st.title("🔥 쇼츠 자동 생성기 (매운맛 Ver)")
-st.caption("팬들의 반응을 폭발시킬 자극적인 주제가 준비되었습니다.")
+st.title("💾 쇼츠 자동 생성기 (자동저장 Ver)")
+st.caption(f"사진을 직접 업로드하면 '{IMAGE_SAVE_DIR}' 폴더에 저장되어, 다음부터는 자동으로 불러옵니다.")
 
-# === [사이드바: 디자인 설정] ===
+# === [사이드바] ===
 with st.sidebar:
     st.header("🎨 디자인 설정")
-    bg_color = st.color_picker("배경색 (전체)", "#000000")
-    title_color = st.color_picker("질문 글자색", "#FFFF00")
-    tag_bg_color = st.color_picker("이름표 배경색", "#000000")
-    border_color = st.color_picker("테두리 색상", "#00FF00")
-    name_color = st.color_picker("이름 글자색", "#00FF00")
+    bg_color = st.color_picker("배경색", "#000000")
+    title_color = st.color_picker("질문 색", "#FFFF00")
+    tag_bg_color = st.color_picker("이름표 배경", "#000000")
+    border_color = st.color_picker("테두리 색", "#00FF00")
+    name_color = st.color_picker("이름 색", "#00FF00")
+    design_settings = {'bg_color': bg_color, 'title_color': title_color, 'tag_bg_color': tag_bg_color, 'border_color': border_color, 'name_color': name_color}
 
-    design_settings = {
-        'bg_color': bg_color,
-        'title_color': title_color,
-        'tag_bg_color': tag_bg_color,
-        'border_color': border_color,
-        'name_color': name_color
-    }
+    st.divider()
+    st.header("네이버 API (선택)")
+    n_id = st.text_input("Client ID", key="n_id")
+    n_secret = st.text_input("Client Secret", type="password", key="n_secret")
+    naver_keys = {'id': n_id, 'secret': n_secret}
 
 # === [메인 탭] ===
-tab_singer, tab_topic = st.tabs(["👤 인물 설정", "📝 주제 설정"])
-
+tab_singer, tab_topic = st.tabs(["👤 인물", "📝 주제"])
 with tab_singer:
-    singer_mode = st.radio("인물 선택 방식", ["랜덤 추천", "직접 선택"], horizontal=True, key="s_mode")
-    selected_main_singer = None
-    if singer_mode == "직접 선택":
-        selected_main_singer = st.selectbox("가수 목록", TROT_SINGERS, key="s_select")
-
+    singer_mode = st.radio("인물 선택", ["랜덤", "직접"], horizontal=True, key="s_mode")
+    selected_main_singer = st.selectbox("가수 목록", TROT_SINGERS, key="s_select") if singer_mode == "직접" else None
 with tab_topic:
-    topic_mode = st.radio("주제 선택 방식", ["랜덤 추천", "직접 선택"], horizontal=True, key="t_mode")
-    selected_quiz_topic = None
-    if topic_mode == "직접 선택":
-        selected_quiz_topic = st.selectbox("주제 목록 (100개)", QUIZ_TOPICS, key="t_select")
+    topic_mode = st.radio("주제 선택", ["랜덤", "직접"], horizontal=True, key="t_mode")
+    selected_quiz_topic = st.selectbox("주제 목록", QUIZ_TOPICS, key="t_select") if topic_mode == "직접" else None
 
 st.divider()
 
-if st.button("🚀 설정대로 퀴즈 생성하기", type="primary", use_container_width=True):
-    with st.spinner("🤖 자극적인 이미지를 찾는 중..."):
-        if singer_mode == "직접 선택": correct_answer = selected_main_singer
+if st.button("🚀 퀴즈 생성하기", type="primary", use_container_width=True):
+    with st.spinner("💾 저장된 사진 확인 중... (없으면 검색)"):
+        if singer_mode == "직접": correct_answer = selected_main_singer
         else: correct_answer = random.choice(TROT_SINGERS)
         
         wrong_answers = random.sample([s for s in TROT_SINGERS if s != correct_answer], 3)
         options = wrong_answers + [correct_answer]
         random.shuffle(options)
         
-        if topic_mode == "직접 선택": question = selected_quiz_topic.format(name=correct_answer)
-        else: question = random.choice(QUIZ_TOPICS).format(name=correct_answer)
+        question = selected_quiz_topic.format(name=correct_answer) if topic_mode == "직접" else random.choice(QUIZ_TOPICS).format(name=correct_answer)
         
-        auto_urls = []
+        # URL 또는 로컬 식별자 수집
+        results = []
         for singer in options:
-            url = search_image_auto(singer)
-            auto_urls.append(url)
+            res = search_image_hybrid(singer, naver_keys)
+            results.append(res)
         
         st.session_state['auto_data'] = {
             'q': question,
             'names': options,
-            'urls': auto_urls
+            'results': results # URL or "LOCAL_FOUND"
         }
 
 if 'auto_data' in st.session_state:
     data = st.session_state['auto_data']
     col_l, col_r = st.columns([1, 1.2])
     
+    # 최종적으로 PIL 이미지들을 담을 리스트
+    final_pil_images = []
+
     with col_l:
-        st.subheader("🛠️ 사진 확인 & 업로드")
+        st.subheader("🛠️ 사진 확인")
         new_q = st.text_area("질문 멘트", value=data['q'], height=80)
-        final_sources = []
         
         for i in range(4):
             singer_name = data['names'][i]
+            search_res = data['results'][i]
+            
             st.markdown(f"**{i+1}번: {singer_name}**")
             
-            if data['urls'][i]:
-                st.image(data['urls'][i], width=150)
-                final_sources.append(data['urls'][i])
+            current_img = None
+            
+            # 1. 로컬에 저장된 파일이 있는지 확인
+            local_file = load_image_local(singer_name)
+            
+            if local_file:
+                st.success("📂 저장된 사진을 불러왔습니다!")
+                st.image(local_file, width=150)
+                current_img = local_file
+            
+            # 2. 로컬에 없지만 검색 결과(URL)가 있는 경우
+            elif search_res and search_res != "LOCAL_FOUND":
+                st.info("🌐 인터넷 검색 결과입니다.")
+                st.image(search_res, width=150)
+                # URL 이미지를 다운로드해서 current_img로 설정
+                current_img = fetch_image_secure(search_res)
+            
+            # 3. 아무것도 없는 경우 (직접 업로드 필요)
             else:
-                st.warning("이미지 자동 로드 실패")
-                search_query = urllib.parse.quote(f"{singer_name} 고화질")
-                google_url = f"https://www.google.com/search?q={search_query}&tbm=isch"
-                st.markdown(f"👉 **[🔍 '{singer_name}' 사진 구글에서 찾기 (클릭)]({google_url})**")
-                
-                uploaded = st.file_uploader(f"{singer_name} 사진 직접 올리기", key=f"up_{i}")
-                final_sources.append(uploaded if uploaded else None)
+                st.warning("사진이 없습니다. 직접 올려주세요.")
+                # 구글 링크 등 제공
+                q_enc = urllib.parse.quote(f"{singer_name} 고화질")
+                st.markdown(f"[구글 검색](https://www.google.com/search?q={q_enc}&tbm=isch)")
+
+            # 업로드 버튼 (항상 표시 - 마음에 안 들면 바꾸라고)
+            uploaded = st.file_uploader(f"'{singer_name}' 사진 업로드/변경 (자동저장됨)", key=f"up_{i}")
+            
+            if uploaded:
+                # 업로드하면 -> 로컬에 저장하고 -> 그걸 사용
+                save_image_local(singer_name, uploaded)
+                current_img = Image.open(uploaded).convert("RGB")
+                st.toast(f"{singer_name} 사진이 저장되었습니다! 다음엔 자동으로 뜹니다.")
+            
+            final_pil_images.append(current_img)
             st.divider()
 
     with col_r:
         st.subheader("📸 최종 결과물")
-        # 색상 변경 시 바로 반영되도록 버튼(기능 없음)을 하나 두거나 바로 렌더링
-        if st.button("✨ 결과물 다시 그리기", use_container_width=True): pass
-
-        final_img = create_shorts_image(new_q, data['names'], final_sources, design_settings)
-        st.image(final_img, caption="완성본 (디자인 적용됨)", use_container_width=True)
+        if st.button("✨ 다시 그리기", use_container_width=True): pass
+        
+        final_img = create_shorts_image(new_q, data['names'], final_pil_images, design_settings)
+        st.image(final_img, caption="완성본", use_container_width=True)
         
         buf = BytesIO()
         final_img.save(buf, format="JPEG", quality=95)
-        st.download_button("💾 이미지 다운로드", data=buf.getvalue(), file_name="shorts_hot.jpg", mime="image/jpeg", type="primary", use_container_width=True)
+        st.download_button("💾 다운로드", data=buf.getvalue(), file_name="shorts_auto.jpg", mime="image/jpeg", type="primary", use_container_width=True)
