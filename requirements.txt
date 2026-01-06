@@ -1,6 +1,6 @@
 streamlit
-Pillow
-requests
 duckduckgo-search
 opencv-python-headless
 numpy
+requests
+Pillow
