@@ -5,7 +5,7 @@ from io import BytesIO
 import os
 
 # --- [1. 기본 설정 및 폴더 준비] ---
-st.set_page_config(page_title="트로트 쇼츠 생성기 (줄간격)", page_icon="🎵", layout="wide")
+st.set_page_config(page_title="트로트 쇼츠 생성기 (완전통합)", page_icon="🎵", layout="wide")
 
 IMAGE_SAVE_DIR = "images"
 if not os.path.exists(IMAGE_SAVE_DIR):
@@ -35,7 +35,7 @@ def check_password():
 
 if not check_password(): st.stop()
 
-# --- [3. 데이터 설정: 트로트 가수 복구] ---
+# --- [3. 데이터 설정: 트로트 가수 & 매운맛 주제] ---
 TROT_SINGERS_TOP50 = [
     "임영웅", "이찬원", "박지현", "영탁", "김호중", "정동원", "장민호", "박서진", "안성훈", "손태진",
     "진해성", "최수호", "송가인", "전유진", "양지은", "김다현", "김태연", "홍지윤", "황영웅", "진욱",
@@ -45,10 +45,7 @@ TROT_SINGERS_TOP50 = [
 ]
 
 QUIZ_TOPICS = [
-    # --- [기존 QUIZ_TOPICS를 이걸로 싹 교체하세요] ---
-
-QUIZ_TOPICS = [
-    # 💰 1. 돈 & 재력 (가장 클릭률 높음)
+    # 💰 1. 돈 & 재력
     "걸어다니는 중소기업! 행사비 가장 비쌀 것 같은 가수는?",
     "통장에 현금 100억 있을 것 같은 재력왕은?",
     "부모님께 강남 아파트 사드렸을 것 같은 효자는?",
@@ -57,7 +54,7 @@ QUIZ_TOPICS = [
     "밥값/술값 계산할 때 카드 가장 먼저 꺼낼 것 같은 사람은?",
     "나중에 건물주 될 관상 1위는?",
 
-    # ❤️ 2. 결혼 & 며느리/사위 (댓글 전쟁 유발)
+    # ❤️ 2. 결혼 & 며느리/사위
     "상견례 프리패스상! 시어머니/장모님 사랑 독차지할 1위?",
     "내 딸/아들과 결혼시키고 싶은 1등 신랑/신붓감은?",
     "결혼하면 배우자에게 아침밥 차려줄 것 같은 사랑꾼은?",
@@ -65,7 +62,7 @@ QUIZ_TOPICS = [
     "명절에 처가/시댁 가서 일 가장 잘 도울 것 같은 사람은?",
     "평생 바람 안 피우고 나만 바라볼 것 같은 해바라기는?",
 
-    # ✨ 3. 외모 & 매력 (팬심 자극)
+    # ✨ 3. 외모 & 매력
     "실물 깡패! 실제로 보면 후광이 비칠 것 같은 외모 1위?",
     "한복이 가장 잘 어울리는 '조선시대 귀공자/공주' 스타일은?",
     "안경 벗으면 이미지가 확 바뀌는 반전 매력 1위?",
@@ -74,14 +71,14 @@ QUIZ_TOPICS = [
     "화장품 CF 찍으면 완판 대란 일으킬 것 같은 얼굴은?",
     "섹시함과 귀여움이 공존하는 사기 캐릭터 1위?",
 
-    # 🎤 4. 실력 & 끼 (인정 욕구)
+    # 🎤 4. 실력 & 끼
     "성대 보험 가입이 시급한 국보급 목소리 1위?",
     "예능 나가면 유재석도 배꼽 잡게 만들 입담꾼은?",
     "트로트 안 했으면 개그맨/배우 해서라도 성공했을 끼쟁이는?",
     "콘서트 티켓팅 1초 컷! 표 구하기 하늘의 별 따기인 가수는?",
     "행사장에서 앵콜 요청 1시간 동안 안 놔줄 것 같은 가수는?",
 
-    # 🥊 5. 밸런스 & 상상 (참여 유도)
+    # 🥊 5. 밸런스 & 상상
     "무인도에 떨어져도 끝까지 살아남을 것 같은 생존왕은?",
     "학창 시절 전교 1등 놓치지 않았을 것 같은 모범생은?",
     "화나면 웃으면서 조용히 처리할 것 같은 무서운 사람은?",
@@ -124,13 +121,12 @@ def create_final_image(q_text, names, design):
     font_name = get_font(design['n_size'])
     font_bottom = get_font(design['bot_size'])
     
-    # [NEW] 줄간격 값 가져오기
+    # 줄간격 설정
     line_spacing = design['line_spacing']
     
     # 1. 상단 질문
     top_y = design['layout_top_y']
     try:
-        # spacing 옵션 추가
         bbox = draw.textbbox((0, 0), q_text, font=font_title, spacing=line_spacing)
         text_w = bbox[2] - bbox[0]
         draw.text(((1080 - text_w) / 2, top_y), q_text, font=font_title, fill=design['top_color'], align="center", spacing=line_spacing)
@@ -197,7 +193,6 @@ def create_final_image(q_text, names, design):
     bot_y = design['layout_bot_y']
     if bottom_text:
         try:
-            # spacing 옵션 추가
             bbox_b = draw.textbbox((0, 0), bottom_text, font=font_bottom, spacing=line_spacing)
             text_bw = bbox_b[2] - bbox_b[0]
             draw.text(((1080 - text_bw) / 2, bot_y), bottom_text, font=font_bottom, fill=design['bot_color'], align="center", spacing=line_spacing)
@@ -252,7 +247,7 @@ def generate_narration_script(question, singers):
     return script
 
 # --- [6. 메인 UI] ---
-st.title("🎵 트로트 쇼츠 생성기 (줄간격)")
+st.title("🎵 트로트 쇼츠 생성기 (통합판)")
 
 if not os.path.exists(FONT_FILE):
     st.error(f"⚠️ '{FONT_FILE}' 파일이 필요합니다.")
@@ -276,8 +271,8 @@ with st.sidebar:
         top_size = st.slider("⬆️ 상단 질문 크기", 50, 150, 90)
         bot_size = st.slider("⬇️ 하단 문구 크기", 30, 120, 70)
         n_size = st.slider("이름 크기", 40, 120, 65)
-        # [NEW] 줄간격 슬라이더
-        line_spacing = st.slider("📝 글자 줄간격 (행간)", 0, 100, 30, help="글자가 두 줄 이상일 때 간격을 넓혀줍니다.")
+        # 줄간격 슬라이더
+        line_spacing = st.slider("📝 글자 줄간격 (행간)", 0, 100, 30, help="글자 간격을 넓게 벌려줍니다.")
 
     with tab_layout:
         st.info("💡 여기서 위치와 크기를 조절하세요")
@@ -297,7 +292,6 @@ with st.sidebar:
         'n_color': n_color, 'n_size': n_size, 'bottom_text': bottom_text_input,
         'layout_top_y': layout_top_y, 'layout_img_w': layout_img_w, 
         'layout_img_y': layout_img_y, 'layout_bot_y': layout_bot_y,
-        # 줄간격 변수
         'line_spacing': line_spacing
     }
 
@@ -307,7 +301,6 @@ tab_manage, tab_create = st.tabs(["1. 📸 사진 등록/관리", "2. 🚀 퀴�
 # [탭 1: 사진 등록]
 with tab_manage:
     st.subheader("가수 사진 영구 저장")
-    st.caption("기존 사진이 없다면 새로 등록해주세요.")
     col_m1, col_m2 = st.columns(2)
     with col_m1:
         target = st.selectbox("가수 선택", TROT_SINGERS_TOP50)
