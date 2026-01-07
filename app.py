@@ -5,7 +5,7 @@ from io import BytesIO
 import os
 
 # --- [1. 기본 설정 및 폴더 준비] ---
-st.set_page_config(page_title="쇼츠 생성기 (레이아웃조절)", page_icon="📐", layout="wide")
+st.set_page_config(page_title="트로트 쇼츠 생성기 (줄간격)", page_icon="🎵", layout="wide")
 
 IMAGE_SAVE_DIR = "images"
 if not os.path.exists(IMAGE_SAVE_DIR):
@@ -35,7 +35,7 @@ def check_password():
 
 if not check_password(): st.stop()
 
-# --- [3. 데이터 설정] ---
+# --- [3. 데이터 설정: 트로트 가수 복구] ---
 TROT_SINGERS_TOP50 = [
     "임영웅", "이찬원", "박지현", "영탁", "김호중", "정동원", "장민호", "박서진", "안성훈", "손태진",
     "진해성", "최수호", "송가인", "전유진", "양지은", "김다현", "김태연", "홍지윤", "황영웅", "진욱",
@@ -53,19 +53,19 @@ QUIZ_TOPICS = [
 
 # --- [4. 핵심 기능 함수] ---
 
-def save_image_to_disk(singer_name, uploaded_file):
+def save_image_to_disk(name, uploaded_file):
     try:
         img = Image.open(uploaded_file).convert("RGB")
-        file_path = os.path.join(IMAGE_SAVE_DIR, f"{singer_name}.jpg")
+        file_path = os.path.join(IMAGE_SAVE_DIR, f"{name}.jpg")
         img.save(file_path, "JPEG", quality=100)
         return True
     except Exception as e:
         st.error(f"저장 실패: {e}")
         return False
 
-def load_image_from_disk(singer_name):
+def load_image_from_disk(name):
     for ext in ['jpg', 'jpeg', 'png', 'JPG', 'PNG']:
-        file_path = os.path.join(IMAGE_SAVE_DIR, f"{singer_name}.{ext}")
+        file_path = os.path.join(IMAGE_SAVE_DIR, f"{name}.{ext}")
         if os.path.exists(file_path):
             try:
                 return Image.open(file_path).convert("RGB")
@@ -86,28 +86,30 @@ def create_final_image(q_text, names, design):
     font_name = get_font(design['n_size'])
     font_bottom = get_font(design['bot_size'])
     
-    # 1. 상단 질문 그리기 (위치 조절 가능)
+    # [NEW] 줄간격 값 가져오기
+    line_spacing = design['line_spacing']
+    
+    # 1. 상단 질문
     top_y = design['layout_top_y']
     try:
-        bbox = draw.textbbox((0, 0), q_text, font=font_title)
+        # spacing 옵션 추가
+        bbox = draw.textbbox((0, 0), q_text, font=font_title, spacing=line_spacing)
         text_w = bbox[2] - bbox[0]
-        draw.text(((1080 - text_w) / 2, top_y), q_text, font=font_title, fill=design['top_color'], align="center")
+        draw.text(((1080 - text_w) / 2, top_y), q_text, font=font_title, fill=design['top_color'], align="center", spacing=line_spacing)
     except:
         draw.text((50, top_y), q_text, fill=design['top_color'])
 
-    # 2. 이미지 배치 (크기 & 위치 조절 가능)
+    # 2. 이미지 배치
     img_w = design['layout_img_w']
-    img_h = int(img_w * 1.1) # 비율 유지 (세로가 조금 더 김)
+    img_h = int(img_w * 1.1)
     start_y = design['layout_img_y']
     
-    gap_x = 40 # 가로 간격
-    gap_y = 160 # 세로 간격 (이름표 공간)
+    gap_x = 40 
+    gap_y = 160 
     
-    # 중앙 정렬을 위한 X 시작점 자동 계산
     total_w = (img_w * 2) + gap_x
     start_x = (1080 - total_w) // 2
 
-    # 좌표 계산
     positions = [
         (start_x, start_y), 
         (start_x + img_w + gap_x, start_y), 
@@ -121,7 +123,6 @@ def create_final_image(q_text, names, design):
         if img is None:
             img = Image.new('RGB', size, (50, 50, 50))
         
-        # 리사이즈
         img_ratio = img.width / img.height
         target_ratio = size[0] / size[1]
         if img_ratio > target_ratio:
@@ -136,11 +137,11 @@ def create_final_image(q_text, names, design):
         img = img.resize(size, Image.LANCZOS)
         canvas.paste(img, pos)
 
-        # 이름표 (사진 크기에 비례)
+        # 이름표
         tag_w = int(img_w * 0.9)
         tag_h = 110
         tag_x = pos[0] + (size[0] - tag_w) // 2
-        tag_y = pos[1] + size[1] + 10 # 사진 바로 아래
+        tag_y = pos[1] + size[1] + 10 
         
         draw.rounded_rectangle([tag_x, tag_y, tag_x + tag_w, tag_y + tag_h], radius=20, fill=design['tag_bg'], outline=design['border'], width=5)
         
@@ -153,19 +154,20 @@ def create_final_image(q_text, names, design):
         except: 
             draw.text((tag_x+20, tag_y+30), display_name, fill=design['n_color'])
 
-    # 3. 하단 문구 (위치 조절 가능)
+    # 3. 하단 문구
     bottom_text = design.get('bottom_text', '')
     bot_y = design['layout_bot_y']
     if bottom_text:
         try:
-            bbox_b = draw.textbbox((0, 0), bottom_text, font=font_bottom)
+            # spacing 옵션 추가
+            bbox_b = draw.textbbox((0, 0), bottom_text, font=font_bottom, spacing=line_spacing)
             text_bw = bbox_b[2] - bbox_b[0]
-            draw.text(((1080 - text_bw) / 2, bot_y), bottom_text, font=font_bottom, fill=design['bot_color'], align="center")
+            draw.text(((1080 - text_bw) / 2, bot_y), bottom_text, font=font_bottom, fill=design['bot_color'], align="center", spacing=line_spacing)
         except: pass
 
     return canvas
 
-# --- [5. 콘텐츠 생성 함수] ---
+# --- [5. 콘텐츠 생성 함수 (트로트 버전)] ---
 def generate_youtube_metadata(question, singers):
     titles = [
         f"🔥 {question} 1위는 과연 누구일까요? #트로트",
@@ -212,7 +214,7 @@ def generate_narration_script(question, singers):
     return script
 
 # --- [6. 메인 UI] ---
-st.title("📐 쇼츠 생성기 (위치/크기 조절판)")
+st.title("🎵 트로트 쇼츠 생성기 (줄간격)")
 
 if not os.path.exists(FONT_FILE):
     st.error(f"⚠️ '{FONT_FILE}' 파일이 필요합니다.")
@@ -232,25 +234,21 @@ with st.sidebar:
         border = st.color_picker("테두리 색", "#00FF00")
         n_color = st.color_picker("이름 색", "#00FF00")
         st.divider()
-        st.subheader("📏 글자 크기")
+        st.subheader("📏 크기/간격 설정")
         top_size = st.slider("⬆️ 상단 질문 크기", 50, 150, 90)
         bot_size = st.slider("⬇️ 하단 문구 크기", 30, 120, 70)
         n_size = st.slider("이름 크기", 40, 120, 65)
+        # [NEW] 줄간격 슬라이더
+        line_spacing = st.slider("📝 글자 줄간격 (행간)", 0, 100, 30, help="글자가 두 줄 이상일 때 간격을 넓혀줍니다.")
 
     with tab_layout:
         st.info("💡 여기서 위치와 크기를 조절하세요")
-        
-        st.caption("1️⃣ 상단 질문")
-        layout_top_y = st.slider("질문 위치 (Y좌표)", 50, 500, 150, help="숫자가 작으면 위로, 크면 아래로")
-        
+        layout_top_y = st.slider("질문 위치 (Y좌표)", 50, 500, 150)
         st.divider()
-        st.caption("2️⃣ 중앙 사진")
-        layout_img_w = st.slider("사진 크기 (너비)", 250, 500, 400, help="사진 크기를 조절")
-        layout_img_y = st.slider("사진 뭉치 위치 (Y좌표)", 200, 1000, 400, help="사진 전체를 위아래로 이동")
-        
+        layout_img_w = st.slider("사진 크기 (너비)", 250, 500, 400)
+        layout_img_y = st.slider("사진 뭉치 위치 (Y좌표)", 200, 1000, 400)
         st.divider()
-        st.caption("3️⃣ 하단 문구")
-        layout_bot_y = st.slider("문구 위치 (Y좌표)", 1200, 1850, 1600, help="숫자가 크면 더 아래로 내려갑니다")
+        layout_bot_y = st.slider("문구 위치 (Y좌표)", 1200, 1850, 1600)
 
     with tab_text:
         bottom_text_input = st.text_area("하단 문구 내용", "화면 두번 터치\n댓글로 정답을 남겨주세요!")
@@ -259,9 +257,10 @@ with st.sidebar:
         'bg': bg_color, 'top_color': top_color, 'top_size': top_size, 
         'bot_color': bot_color, 'bot_size': bot_size, 'tag_bg': tag_bg, 'border': border, 
         'n_color': n_color, 'n_size': n_size, 'bottom_text': bottom_text_input,
-        # 레이아웃 변수 전달
         'layout_top_y': layout_top_y, 'layout_img_w': layout_img_w, 
-        'layout_img_y': layout_img_y, 'layout_bot_y': layout_bot_y
+        'layout_img_y': layout_img_y, 'layout_bot_y': layout_bot_y,
+        # 줄간격 변수
+        'line_spacing': line_spacing
     }
 
 # 탭 구성
@@ -270,6 +269,7 @@ tab_manage, tab_create = st.tabs(["1. 📸 사진 등록/관리", "2. 🚀 퀴�
 # [탭 1: 사진 등록]
 with tab_manage:
     st.subheader("가수 사진 영구 저장")
+    st.caption("기존 사진이 없다면 새로 등록해주세요.")
     col_m1, col_m2 = st.columns(2)
     with col_m1:
         target = st.selectbox("가수 선택", TROT_SINGERS_TOP50)
